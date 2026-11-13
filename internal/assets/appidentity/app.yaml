@@ -1,0 +1,11 @@
+# Docpresser application identity. This file is the source of truth for the
+# embedded identity used by released binaries.
+app:
+  vendor: 3leaps
+  binary_name: docpresser
+  env_prefix: DOCPRESSER_
+  config_name: docpresser
+  description: "Qualification and synthetic-workload harness for structured documents (YAML, JSON/I-JSON/JCS, XML, XHTML, SVG; OOXML and PDF in later profiles)."
+  version: "0.1.0"
+metadata:
+  repository_category: cli

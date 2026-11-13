@@ -1,0 +1,154 @@
+# yamllint disable rule:document-start
+# yamllint disable rule:truthy
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    container:
+      # yamllint disable-line rule:line-length
+      image: ghcr.io/fulmenhq/goneat-tools-runner-glibc:v0.5.15@sha256:8c6324556e0e8c951b0ad2225f1cb87fad13445b6dcbc83717ace41c6959608e
+      options: --user root
+    env:
+      GOTOOLCHAIN: local
+      FULMEN_WORKSPACE_ROOT: ${{ github.workspace }}
+    steps:
+      - name: Checkout
+        # yamllint disable-line rule:line-length
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Setup (temp perms + git safe.directory)
+        run: |
+          set -euo pipefail
+          install -d -m 0777 /__w/_temp || true
+          install -d -m 0777 /__w/_temp/_runner_file_commands || true
+          chown -R "$(id -u)":"$(id -g)" /__w/_temp || true
+          chmod -R 777 /__w/_temp || true
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+      - name: Verify toolchain (no installs)
+        run: |
+          set -euo pipefail
+          echo "=== Bundled toolchain (from image) ==="
+          go version
+          goneat --version
+          golangci-lint version
+          prettier --version
+          yamlfmt --version
+          make verify-toolchain
+      - name: Download modules
+        run: go mod download
+      - name: Complete non-mutating check
+        run: make check
+  native-go:
+    name: Go tests and CLI build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - runner: macos-15
+            goos: darwin
+            goarch: arm64
+          - runner: windows-latest
+            goos: windows
+            goarch: amd64
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - name: Checkout
+        # yamllint disable-line rule:line-length
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up Go
+        # yamllint disable-line rule:line-length
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Verify native Go platform
+        run: |
+          set -euo pipefail
+          expected_go="go$(sed -n 's/^go //p' go.mod)"
+          test "$(go env GOVERSION)" = "$expected_go"
+          test "$(go env GOOS)" = '${{ matrix.goos }}'
+          test "$(go env GOARCH)" = '${{ matrix.goarch }}'
+          go version
+      - name: Download modules
+        run: go mod download
+      - name: Run native tests
+        run: go test -v ./...
+      - name: Build native CLI
+        run: |
+          go build -trimpath -buildvcs=false \
+            -o "$RUNNER_TEMP/docpresser" ./cmd/docpresser
+  native-go-arm64:
+    name: Go tests and CLI build (${{ matrix.goos }}/${{ matrix.goarch }})
+    # yamllint disable rule:line-length
+    if: >-
+      github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # yamllint enable rule:line-length
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest-arm64-s
+            goos: linux
+            goarch: amd64
+          - runner: windows-latest-arm64-s
+            goos: windows
+            goarch: arm64
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - name: Checkout
+        # yamllint disable-line rule:line-length
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up Go
+        # yamllint disable-line rule:line-length
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Verify native Go platform
+        run: |
+          set -euo pipefail
+          expected_go="go$(sed -n 's/^go //p' go.mod)"
+          test "$(go env GOVERSION)" = "$expected_go"
+          test "$(go env GOOS)" = '${{ matrix.goos }}'
+          test "$(go env GOARCH)" = '${{ matrix.goarch }}'
+          go version
+      - name: Download modules
+        run: go mod download
+      - name: Run native tests
+        run: go test -v ./...
+      - name: Build native CLI
+        run: |
+          go build -trimpath -buildvcs=false \
+            -o "$RUNNER_TEMP/docpresser" ./cmd/docpresser

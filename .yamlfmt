@@ -1,0 +1,16 @@
+# yamlfmt configuration for Docpresser
+# This file configures yamlfmt to match goneat's YAML formatting preferences
+
+formatter:
+  type: basic
+  indent: 2
+  line_ending: lf
+
+# Exclude patterns
+exclude:
+  - node_modules/**
+  - vendor/**
+  - .git/**
+  - dist/**
+  - bin/**
+  - corpus/v0/**
