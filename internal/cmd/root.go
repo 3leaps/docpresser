@@ -73,6 +73,7 @@ func Initialize(ctx context.Context, identity *appidentity.Identity, logger *log
 	rootCmd.AddCommand(newBindCorpusCmd())
 	rootCmd.AddCommand(newGenerateCmd())
 	rootCmd.AddCommand(newValidateCmd())
+	rootCmd.AddCommand(newRunCmd())
 	rootCmd.AddCommand(newVerifyCmd())
 	rootCmd.AddCommand(newSummarizeCmd())
 }
