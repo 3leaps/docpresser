@@ -70,4 +70,9 @@ func Initialize(ctx context.Context, identity *appidentity.Identity, logger *log
 	rootCmd.AddCommand(newVersionCmd(identity))
 	rootCmd.AddCommand(newEnvinfoCmd(identity))
 	rootCmd.AddCommand(newDoctorCmd(identity))
+	rootCmd.AddCommand(newBindCorpusCmd())
+	rootCmd.AddCommand(newGenerateCmd())
+	rootCmd.AddCommand(newValidateCmd())
+	rootCmd.AddCommand(newVerifyCmd())
+	rootCmd.AddCommand(newSummarizeCmd())
 }

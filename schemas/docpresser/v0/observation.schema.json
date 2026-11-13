@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/docpresser/v0/observation.schema.json",
+  "title": "Docpresser Case Observation Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "case_id",
+    "subject",
+    "operation",
+    "input_sha256",
+    "input_bytes",
+    "status",
+    "duration_ns",
+    "peak_rss_bytes",
+    "exit_code"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "docpresser/v0"
+    },
+    "case_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "target",
+        "baseline"
+      ]
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "load_value",
+        "load_events",
+        "emit_canonical",
+        "project_ijson",
+        "project_jcs",
+        "lint_migration",
+        "extract_text"
+      ]
+    },
+    "input_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "input_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "error",
+        "refused_bounded",
+        "unsupported",
+        "crash_signal",
+        "oom_killed",
+        "timeout_exceeded",
+        "protocol_error"
+      ]
+    },
+    "output_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "output_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "document_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "event_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "canonical_value": {
+      "type": "string"
+    },
+    "error_phase": {
+      "type": "string",
+      "enum": [
+        "input",
+        "syntax",
+        "resolution",
+        "structure",
+        "limit",
+        "typed",
+        "runtime"
+      ]
+    },
+    "error_code": {
+      "type": "string"
+    },
+    "signal": {
+      "type": "string"
+    },
+    "duration_ns": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "parse_ns": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "emit_ns": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "peak_rss_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "exit_code": {
+      "type": "integer"
+    },
+    "hazards_found": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

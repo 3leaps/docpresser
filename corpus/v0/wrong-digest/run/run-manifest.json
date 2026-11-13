@@ -1,0 +1,27 @@
+{
+  "version": "docpresser/v0",
+  "state": "complete",
+  "run_id": "specimen-wrong-digest",
+  "profile": "smoke",
+  "pack_sha256": "c2cb528b10c4ef685489ff7e705d42924e0ee4843887ad997fe80d05183200d5",
+  "schema_sha256": "30c90f7592b99f37f968e35eb6bf90bcd469d0fe59f38b5af4e93009a1229adc",
+  "observations_sha256": "95251c7f14625853c10302aeef6a4201a12ce8b53ea3ac9174516538bb383212",
+  "observation_count": 1,
+  "started_at": "2026-11-13T00:00:00Z",
+  "completed_at": "2026-11-13T00:00:01Z",
+  "host": {
+    "goos": "darwin",
+    "goarch": "arm64",
+    "go_version": "go1.26.10",
+    "num_cpu": 8,
+    "coordinator_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "subjects": [
+    {
+      "name": "yamlprims-go",
+      "role": "target",
+      "version": "v0.2.1",
+      "driver_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ]
+}

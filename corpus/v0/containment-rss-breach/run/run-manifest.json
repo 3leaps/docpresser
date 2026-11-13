@@ -1,0 +1,27 @@
+{
+  "version": "docpresser/v0",
+  "state": "complete",
+  "run_id": "specimen-containment-rss-breach",
+  "profile": "smoke",
+  "pack_sha256": "717a866ef7b6d7b5a5b3f857d6b86a581c7418434e5407ce788304e954fbb57c",
+  "schema_sha256": "30c90f7592b99f37f968e35eb6bf90bcd469d0fe59f38b5af4e93009a1229adc",
+  "observations_sha256": "a8027909ccb27386b2e5f1f0cc3a398af0de1eb741ee43b55c153fb9f4998d8f",
+  "observation_count": 1,
+  "started_at": "2026-11-13T00:00:00Z",
+  "completed_at": "2026-11-13T00:00:01Z",
+  "host": {
+    "goos": "darwin",
+    "goarch": "arm64",
+    "go_version": "go1.26.10",
+    "num_cpu": 8,
+    "coordinator_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "subjects": [
+    {
+      "name": "yamlprims-go",
+      "role": "target",
+      "version": "v0.2.1",
+      "driver_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/docpresser/v0/run-manifest.schema.json",
+  "title": "Docpresser Run Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "state",
+    "run_id",
+    "profile",
+    "pack_sha256",
+    "schema_sha256",
+    "observations_sha256",
+    "observation_count",
+    "started_at",
+    "completed_at",
+    "host",
+    "subjects"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "docpresser/v0"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "incomplete"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pack_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "schema_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "observations_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "observation_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "started_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "completed_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goos",
+        "goarch",
+        "go_version",
+        "num_cpu",
+        "coordinator_sha256"
+      ],
+      "properties": {
+        "goos": {
+          "type": "string",
+          "minLength": 1
+        },
+        "goarch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "go_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "num_cpu": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "coordinator_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "subjects": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "role",
+          "version",
+          "driver_sha256"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "target",
+              "baseline"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "driver_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

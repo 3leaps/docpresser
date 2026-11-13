@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.3leaps.dev/docpresser/v0/verification-report.schema.json",
+  "title": "Docpresser Verification Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "run_id",
+    "profile",
+    "pack_sha256",
+    "observations_sha256",
+    "verdict",
+    "correctness",
+    "containment",
+    "migration_divergence",
+    "telemetry",
+    "findings"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "docpresser/v0"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pack_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "observations_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail",
+        "inconclusive"
+      ]
+    },
+    "correctness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict",
+        "passed",
+        "failed",
+        "unsupported",
+        "inconclusive"
+      ],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "unsupported",
+            "inconclusive"
+          ]
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unsupported": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inconclusive": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "containment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict",
+        "refused_bounded",
+        "oom_killed",
+        "crash_signal",
+        "timeout_exceeded",
+        "amplification_exceeded"
+      ],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "refused_bounded",
+            "oom_killed",
+            "crash_signal",
+            "timeout_exceeded",
+            "amplification_exceeded",
+            "not_applicable"
+          ]
+        },
+        "refused_bounded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "oom_killed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "crash_signal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timeout_exceeded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "amplification_exceeded": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "migration_divergence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_findings",
+        "by_category",
+        "findings"
+      ],
+      "properties": {
+        "total_findings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by_category": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "case_id",
+              "category",
+              "target_subject",
+              "baseline_subject",
+              "summary"
+            ],
+            "properties": {
+              "case_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "category": {
+                "type": "string",
+                "minLength": 1
+              },
+              "target_subject": {
+                "type": "string",
+                "minLength": 1
+              },
+              "baseline_subject": {
+                "type": "string",
+                "minLength": 1
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "telemetry": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject",
+          "role",
+          "cases",
+          "total_input_bytes",
+          "total_duration_ns",
+          "throughput_mib_per_s",
+          "docs_per_s",
+          "p50_ns",
+          "p95_ns",
+          "p99_ns",
+          "peak_rss_bytes",
+          "max_amplification_ratio"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "target",
+              "baseline"
+            ]
+          },
+          "cases": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_input_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_duration_ns": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "throughput_mib_per_s": {
+            "type": "number",
+            "minimum": 0
+          },
+          "docs_per_s": {
+            "type": "number",
+            "minimum": 0
+          },
+          "p50_ns": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "p95_ns": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "p99_ns": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "peak_rss_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_amplification_ratio": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "axis",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "axis": {
+            "type": "string",
+            "enum": [
+              "manifest",
+              "pack",
+              "correctness",
+              "containment",
+              "migration_divergence"
+            ]
+          },
+          "case_id": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

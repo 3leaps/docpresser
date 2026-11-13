@@ -1,0 +1,26 @@
+{
+  "version": "docpresser/v0",
+  "state": "complete",
+  "pack_kind": "structcorpus",
+  "format_family": "yaml",
+  "tier": "smoke",
+  "corpus_commit": "b52fcd090d6879a0bd58ec5a5496c6a4de90504e",
+  "corpus_profile": "yamlprims-core",
+  "schema_sha256": "30c90f7592b99f37f968e35eb6bf90bcd469d0fe59f38b5af4e93009a1229adc",
+  "case_count": 1,
+  "total_input_bytes": 24,
+  "files": [
+    {
+      "path": "cases.ndjson",
+      "sha256": "c27a39458da9d66c9b4c22354404ab6fd4be8f70ed253f5b5006aa6de7ea3a22",
+      "bytes": 881,
+      "records": 1
+    },
+    {
+      "path": "inputs/yaml/smoke-01.yaml",
+      "sha256": "d0ccfd4878f1aa71a010ba7ea92a21a4c8d298de78d5fcd1b235c9692f8198fd",
+      "bytes": 24,
+      "records": 1
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "version": "docpresser/v0",
+  "state": "complete",
+  "run_id": "specimen-migration-divergence",
+  "profile": "smoke",
+  "pack_sha256": "fc0f9aae82cb2e36b46c5afbfab298f8dd3d2e3988886a3fbe0a2ad624b0c2f8",
+  "schema_sha256": "30c90f7592b99f37f968e35eb6bf90bcd469d0fe59f38b5af4e93009a1229adc",
+  "observations_sha256": "1f8e67f5963bddf107ecfb1891bd84cc0d2686b013861426d7d58f2970c0147c",
+  "observation_count": 1,
+  "started_at": "2026-11-13T00:00:00Z",
+  "completed_at": "2026-11-13T00:00:01Z",
+  "host": {
+    "goos": "darwin",
+    "goarch": "arm64",
+    "go_version": "go1.26.10",
+    "num_cpu": 8,
+    "coordinator_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "subjects": [
+    {
+      "name": "yamlprims-go",
+      "role": "target",
+      "version": "v0.2.1",
+      "driver_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ]
+}
