@@ -56,3 +56,10 @@ temp/
 # Logs
 *.log
 logs/
+
+# Python / Rust / Node driver build caches
+__pycache__/
+*.pyc
+drivers/*/target/
+drivers/*/Cargo.lock
+drivers/*/node_modules/

@@ -1,0 +1,11 @@
+{
+  "name": "@3leaps/docpresser-driver-node-yaml",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone Node.js YAML/JCS subject driver for docpresser",
+  "license": "MIT OR Apache-2.0",
+  "optionalDependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}

@@ -1,0 +1,18 @@
+[package]
+name = "docpresser-driver-yamlprims-rust"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88.0"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[[bin]]
+name = "yamlprims-rust"
+path = "src/main.rs"
+
+[dependencies]
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+yamlprims = "0.2.2"

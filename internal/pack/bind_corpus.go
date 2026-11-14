@@ -289,11 +289,16 @@ func mapStructcorpusCase(rec structcorpusRecord, packRel, boundTier string) (mod
 	tags := []string{rec.Category, rec.Execution.Tier}
 	tags = append(tags, rec.Execution.Hazards...)
 
+	profile := selected.Profile
+	if profile == "" {
+		profile = boundTier
+	}
+
 	return model.PackCase{
 		CaseID:      rec.ID,
 		Format:      rec.Format,
 		Axis:        axis,
-		Profile:     boundTier,
+		Profile:     profile,
 		Operation:   "load_value",
 		InputPath:   packRel,
 		InputSHA256: rec.Input.SHA256,

@@ -138,7 +138,7 @@ func addK8sBundleCases(rng *splitMix64, scale string, cases *[]model.PackCase, i
 			appName, port, replicas,
 		)
 		canonical := fmt.Sprintf(
-			`[{"documents":[{"entries":[[{"t":"str","v":"apiVersion"},{"t":"str","v":"v1"}],[{"t":"str","v":"kind"},{"t":"str","v":"ConfigMap"}],[{"t":"str","v":"metadata"},{"entries":[[{"t":"str","v":"name"},{"t":"str","v":%q}]],"t":"map"}],[{"t":"str","v":"data"},{"entries":[[{"t":"str","v":"port"},{"t":"str","v":%q}],[{"t":"str","v":"replicas"},{"t":"int","v":"%d"}]],"t":"map"}]],"t":"map"}]}]`,
+			`[{"entries":[[{"t":"str","v":"apiVersion"},{"t":"str","v":"v1"}],[{"t":"str","v":"kind"},{"t":"str","v":"ConfigMap"}],[{"t":"str","v":"metadata"},{"entries":[[{"t":"str","v":"name"},{"t":"str","v":%q}]],"t":"map"}],[{"t":"str","v":"data"},{"entries":[[{"t":"str","v":"port"},{"t":"str","v":%q}],[{"t":"str","v":"replicas"},{"t":"int","v":"%d"}]],"t":"map"}]],"t":"map"}]`,
 			appName, strconv.Itoa(port), replicas,
 		)
 		caseID := fmt.Sprintf("synth.k8s.configmap.%02d", i+1)
@@ -195,7 +195,7 @@ func addOpenAPIGraphCases(rng *splitMix64, scale string, cases *[]model.PackCase
 			opID, opID, status,
 		)
 		canonical := fmt.Sprintf(
-			`[{"documents":[{"entries":[[{"t":"str","v":"openapi"},{"t":"str","v":"3.1.0"}],[{"t":"str","v":"info"},{"entries":[[{"t":"str","v":"title"},{"t":"str","v":%q}],[{"t":"str","v":"version"},{"t":"str","v":"1.0.0"}]],"t":"map"}],[{"t":"str","v":"paths"},{"entries":[[{"t":"str","v":"/health"},{"entries":[[{"t":"str","v":"get"},{"entries":[[{"t":"str","v":"operationId"},{"t":"str","v":%q}],[{"t":"str","v":"responses"},{"entries":[[{"t":"str","v":"%d"},{"entries":[[{"t":"str","v":"description"},{"t":"str","v":"ok"}]],"t":"map"}]],"t":"map"}]],"t":"map"}]],"t":"map"}]],"t":"map"}]],"t":"map"}]}]`,
+			`[{"entries":[[{"t":"str","v":"openapi"},{"t":"str","v":"3.1.0"}],[{"t":"str","v":"info"},{"entries":[[{"t":"str","v":"title"},{"t":"str","v":%q}],[{"t":"str","v":"version"},{"t":"str","v":"1.0.0"}]],"t":"map"}],[{"t":"str","v":"paths"},{"entries":[[{"t":"str","v":"/health"},{"entries":[[{"t":"str","v":"get"},{"entries":[[{"t":"str","v":"operationId"},{"t":"str","v":%q}],[{"t":"str","v":"responses"},{"entries":[[{"t":"str","v":"%d"},{"entries":[[{"t":"str","v":"description"},{"t":"str","v":"ok"}]],"t":"map"}]],"t":"map"}]],"t":"map"}]],"t":"map"}]],"t":"map"}]],"t":"map"}]`,
 			opID, opID, status,
 		)
 		caseID := fmt.Sprintf("synth.openapi.spec.%02d", i+1)
@@ -306,9 +306,10 @@ func addDiabolicalCases(rng *splitMix64, scale string, cases *[]model.PackCase, 
 	})
 
 	var quadAnchor strings.Builder
-	for i := 0; i < 24; i++ {
-		_, _ = fmt.Fprintf(&quadAnchor, "k%02d: &shared [%q, %q, %q, %q]\n", i, rng.token("v"), rng.token("v"), rng.token("v"), rng.token("v"))
-		_, _ = fmt.Fprintf(&quadAnchor, "ref%02d: [*shared, *shared, *shared, *shared]\n", i)
+	v0, v1, v2, v3 := rng.token("v"), rng.token("v"), rng.token("v"), rng.token("v")
+	for i := 0; i < 2600; i++ {
+		_, _ = fmt.Fprintf(&quadAnchor, "k%04d: &shared [%q, %q, %q, %q]\n", i, v0, v1, v2, v3)
+		_, _ = fmt.Fprintf(&quadAnchor, "ref%04d: [*shared, *shared, *shared, *shared]\n", i)
 	}
 	quadBytes := []byte(quadAnchor.String())
 	quadRel := "inputs/yaml/diabolical/synth.diabolical.anchor-churn.yaml"
@@ -340,8 +341,8 @@ func addDiabolicalCases(rng *splitMix64, scale string, cases *[]model.PackCase, 
 func addYAML11MigrationCases(_ *splitMix64, cases *[]model.PackCase, inputs map[string][]byte) {
 	// 1. Norway problem bare scalars (NO, on, off, yes)
 	norwayYAML := []byte("country: NO\nswitch: off\nenabled: yes\n")
-	norwayYAML12 := `[{"documents":[{"entries":[[{"t":"str","v":"country"},{"t":"str","v":"NO"}],[{"t":"str","v":"switch"},{"t":"str","v":"off"}],[{"t":"str","v":"enabled"},{"t":"str","v":"yes"}]],"t":"map"}]}]`
-	norwayYAML11 := `[{"documents":[{"entries":[[{"t":"str","v":"country"},{"t":"bool","v":false}],[{"t":"str","v":"switch"},{"t":"bool","v":false}],[{"t":"str","v":"enabled"},{"t":"bool","v":true}]],"t":"map"}]}]`
+	norwayYAML12 := `[{"entries":[[{"t":"str","v":"country"},{"t":"str","v":"NO"}],[{"t":"str","v":"switch"},{"t":"str","v":"off"}],[{"t":"str","v":"enabled"},{"t":"str","v":"yes"}]],"t":"map"}]`
+	norwayYAML11 := `[{"entries":[[{"t":"str","v":"country"},{"t":"bool","v":false}],[{"t":"str","v":"switch"},{"t":"bool","v":false}],[{"t":"str","v":"enabled"},{"t":"bool","v":true}]],"t":"map"}]`
 	norwayRel := "inputs/yaml/migration/synth.migration.norway-booleans.yaml"
 	inputs[norwayRel] = norwayYAML
 	*cases = append(*cases, model.PackCase{
@@ -368,8 +369,8 @@ func addYAML11MigrationCases(_ *splitMix64, cases *[]model.PackCase, inputs map[
 
 	// 2. Legacy octal bare scalar (010, 0755)
 	octalYAML := []byte("mode: 0755\ncount: 010\n")
-	octalYAML12 := `[{"documents":[{"entries":[[{"t":"str","v":"mode"},{"t":"int","v":"755"}],[{"t":"str","v":"count"},{"t":"int","v":"10"}]],"t":"map"}]}]`
-	octalYAML11 := `[{"documents":[{"entries":[[{"t":"str","v":"mode"},{"t":"int","v":"493"}],[{"t":"str","v":"count"},{"t":"int","v":"8"}]],"t":"map"}]}]`
+	octalYAML12 := `[{"entries":[[{"t":"str","v":"mode"},{"t":"int","v":"755"}],[{"t":"str","v":"count"},{"t":"int","v":"10"}]],"t":"map"}]`
+	octalYAML11 := `[{"entries":[[{"t":"str","v":"mode"},{"t":"int","v":"493"}],[{"t":"str","v":"count"},{"t":"int","v":"8"}]],"t":"map"}]`
 	octalRel := "inputs/yaml/migration/synth.migration.legacy-octal.yaml"
 	inputs[octalRel] = octalYAML
 	*cases = append(*cases, model.PackCase{
@@ -396,8 +397,8 @@ func addYAML11MigrationCases(_ *splitMix64, cases *[]model.PackCase, inputs map[
 
 	// 3. Sexagesimal bare scalar (10:20)
 	sexaYAML := []byte("window: 10:20\n")
-	sexaYAML12 := `[{"documents":[{"entries":[[{"t":"str","v":"window"},{"t":"str","v":"10:20"}]],"t":"map"}]}]`
-	sexaYAML11 := `[{"documents":[{"entries":[[{"t":"str","v":"window"},{"t":"int","v":"620"}]],"t":"map"}]}]`
+	sexaYAML12 := `[{"entries":[[{"t":"str","v":"window"},{"t":"str","v":"10:20"}]],"t":"map"}]`
+	sexaYAML11 := `[{"entries":[[{"t":"str","v":"window"},{"t":"int","v":"620"}]],"t":"map"}]`
 	sexaRel := "inputs/yaml/migration/synth.migration.sexagesimal.yaml"
 	inputs[sexaRel] = sexaYAML
 	*cases = append(*cases, model.PackCase{
@@ -424,15 +425,15 @@ func addYAML11MigrationCases(_ *splitMix64, cases *[]model.PackCase, inputs map[
 
 	// 4. Merge key (<<)
 	mergeYAML := []byte("base: &b\n  x: 1\nmerged:\n  <<: *b\n  y: 2\n")
-	mergeYAML12 := `[{"documents":[{"entries":[[{"t":"str","v":"base"},{"entries":[[{"t":"str","v":"x"},{"t":"int","v":"1"}]],"t":"map"}],[{"t":"str","v":"merged"},{"entries":[[{"t":"str","v":"<<"},{"entries":[[{"t":"str","v":"x"},{"t":"int","v":"1"}]],"t":"map"}],[{"t":"str","v":"y"},{"t":"int","v":"2"}]],"t":"map"}]],"t":"map"}]}]`
-	mergeYAML11 := `[{"documents":[{"entries":[[{"t":"str","v":"base"},{"entries":[[{"t":"str","v":"x"},{"t":"int","v":"1"}]],"t":"map"}],[{"t":"str","v":"merged"},{"entries":[[{"t":"str","v":"x"},{"t":"int","v":"1"}],[{"t":"str","v":"y"},{"t":"int","v":"2"}]],"t":"map"}]],"t":"map"}]}]`
+	mergeYAML12 := `[{"entries":[[{"t":"str","v":"base"},{"entries":[[{"t":"str","v":"x"},{"t":"int","v":"1"}]],"t":"map"}],[{"t":"str","v":"merged"},{"entries":[[{"t":"str","v":"<<"},{"entries":[[{"t":"str","v":"x"},{"t":"int","v":"1"}]],"t":"map"}],[{"t":"str","v":"y"},{"t":"int","v":"2"}]],"t":"map"}]],"t":"map"}]`
+	mergeYAML11 := `[{"entries":[[{"t":"str","v":"base"},{"entries":[[{"t":"str","v":"x"},{"t":"int","v":"1"}]],"t":"map"}],[{"t":"str","v":"merged"},{"entries":[[{"t":"str","v":"x"},{"t":"int","v":"1"}],[{"t":"str","v":"y"},{"t":"int","v":"2"}]],"t":"map"}]],"t":"map"}]`
 	mergeRel := "inputs/yaml/migration/synth.migration.merge-key.yaml"
 	inputs[mergeRel] = mergeYAML
 	*cases = append(*cases, model.PackCase{
 		CaseID:      "synth.migration.merge-key",
 		Format:      "yaml",
 		Axis:        "migration_divergence",
-		Profile:     "yaml11-migration",
+		Profile:     "yaml-core",
 		Operation:   "load_value",
 		InputPath:   mergeRel,
 		InputSHA256: sha256Hex(mergeYAML),
@@ -452,7 +453,7 @@ func addYAML11MigrationCases(_ *splitMix64, cases *[]model.PackCase, inputs map[
 
 	// 5. Quoted YAML11Safe round-trip (must not diverge across YAML 1.2 and YAML 1.1)
 	safeYAML := []byte("country: \"NO\"\nswitch: \"off\"\nwindow: \"10:20\"\n")
-	safeCanonical := `[{"documents":[{"entries":[[{"t":"str","v":"country"},{"t":"str","v":"NO"}],[{"t":"str","v":"switch"},{"t":"str","v":"off"}],[{"t":"str","v":"window"},{"t":"str","v":"10:20"}]],"t":"map"}]}]`
+	safeCanonical := `[{"entries":[[{"t":"str","v":"country"},{"t":"str","v":"NO"}],[{"t":"str","v":"switch"},{"t":"str","v":"off"}],[{"t":"str","v":"window"},{"t":"str","v":"10:20"}]],"t":"map"}]`
 	safeRel := "inputs/yaml/migration/synth.migration.yaml11safe-quoted.yaml"
 	inputs[safeRel] = safeYAML
 	*cases = append(*cases, model.PackCase{

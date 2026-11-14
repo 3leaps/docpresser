@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -78,8 +79,11 @@ func NewClient(specStr, role string) (*Client, error) {
 	if len(fields) == 0 {
 		return nil, fmt.Errorf("empty command in subject specification %q", specStr)
 	}
-	cmdPath := fields[0]
-	args := fields[1:]
+	cmdPath := resolveCommandPath(fields[0])
+	args := make([]string, len(fields)-1)
+	for i, arg := range fields[1:] {
+		args[i] = resolveArgPath(arg)
+	}
 
 	driverDigest := computeDriverDigest(cmdPath, args)
 	return &Client{
@@ -242,6 +246,27 @@ func validResponseStatus(s string) bool {
 	default:
 		return false
 	}
+}
+
+func resolveCommandPath(cmdPath string) string {
+	if strings.ContainsRune(cmdPath, filepath.Separator) || strings.HasPrefix(cmdPath, ".") {
+		if abs, err := filepath.Abs(cmdPath); err == nil {
+			return abs
+		}
+	}
+	return cmdPath
+}
+
+func resolveArgPath(arg string) string {
+	if strings.HasPrefix(arg, "-") || filepath.IsAbs(arg) {
+		return arg
+	}
+	if info, err := os.Stat(arg); err == nil && !info.IsDir() {
+		if abs, aErr := filepath.Abs(arg); aErr == nil {
+			return abs
+		}
+	}
+	return arg
 }
 
 func computeDriverDigest(cmdPath string, args []string) string {
