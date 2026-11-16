@@ -114,7 +114,7 @@ jobs:
         include:
           - runner: ubuntu-latest-arm64-s
             goos: linux
-            goarch: amd64
+            goarch: arm64
           - runner: windows-latest-arm64-s
             goos: windows
             goarch: arm64
