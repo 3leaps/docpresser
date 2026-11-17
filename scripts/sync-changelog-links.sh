@@ -74,6 +74,10 @@ fi
 
 LABEL="${BASH_REMATCH[1]}"
 COMPARE_PREFIX="${BASH_REMATCH[2]}"
+if [[ "$COMPARE_PREFIX" != "https://github.com/3leaps/docpresser/compare/" ]]; then
+    echo "[!!] [Unreleased] footer does not point at this repository: $UNRELEASED_LINE" >&2
+    exit 1
+fi
 PREVIOUS_VERSION="${BASH_REMATCH[3]}"
 NEW_UNRELEASED="[${LABEL}]: ${COMPARE_PREFIX}v${VERSION}...HEAD"
 NEW_VERSION_DEF="[${VERSION}]: ${COMPARE_PREFIX}v${PREVIOUS_VERSION}...v${VERSION}"
@@ -83,7 +87,17 @@ if grep -qE "^\[${VERSION//./\\.}\]:" "$CHANGELOG_FILE"; then
     HAS_VERSION_DEF=1
 fi
 
+# Report success only for footers the release-surface guard accepts, so a
+# wrong destination is never described as synced.
+confirm_synced() {
+    "${SCRIPT_DIR}/release-guard-release-surfaces.sh" > /dev/null || {
+        echo "[!!] CHANGELOG footers still fail the release-surface guard" >&2
+        exit 1
+    }
+}
+
 if [[ "$PREVIOUS_VERSION" == "$VERSION" && "$HAS_VERSION_DEF" -eq 1 ]]; then
+    confirm_synced
     echo "[ok] CHANGELOG compare links already synced for $VERSION"
     exit 0
 fi
@@ -132,6 +146,7 @@ awk \
 
 mv "$TMP_FILE" "$CHANGELOG_FILE"
 trap - EXIT
+confirm_synced
 
 if [[ "$HAS_VERSION_DEF" -eq 1 ]]; then
     echo "[ok] CHANGELOG compare links updated for $VERSION"

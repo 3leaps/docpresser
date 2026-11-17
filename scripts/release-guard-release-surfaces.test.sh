@@ -88,16 +88,45 @@ expect_rejected "a dot in the version is not a wildcard" \
     "${version}" "$(mutate "${valid_changelog}" 's/^## \[0\.1\.23\]/## [0x1x23]/')"
 
 expect_rejected "changelog does not define the version link" \
-    "does not define the [0.1.23] link" \
+    "must define the [0.1.23] link exactly once (found 0)" \
     "${version}" "$(mutate "${valid_changelog}" '/^\[0\.1\.23\]: /d')"
 
 expect_rejected "changelog unreleased link still compares from the previous version" \
-    "[Unreleased] link does not compare from v0.1.23" \
+    "[Unreleased] link must be https://github.com/3leaps/docpresser/compare/v0.1.23...HEAD" \
     "${version}" "$(mutate "${valid_changelog}" 's|v0\.1\.23\.\.\.HEAD|v0.1.22...HEAD|')"
 
 expect_rejected "changelog unreleased link absent" \
-    "[Unreleased] link does not compare from v0.1.23" \
+    "must define the [Unreleased] link exactly once (found 0)" \
     "${version}" "$(mutate "${valid_changelog}" '/^\[Unreleased\]: /d')"
+
+# Link destinations must name this repository and the right versions, and each
+# definition must be unique so a stale first definition cannot shadow a
+# correct later one.
+expect_rejected "version link points at another release" \
+    "[0.1.23] link must be" \
+    "${version}" "$(mutate "${valid_changelog}" 's|^\[0\.1\.23\]: .*|[0.1.23]: https://github.com/3leaps/docpresser/releases/tag/v9.9.9|')"
+
+expect_rejected "version link points at another repository" \
+    "[0.1.23] link must be" \
+    "${version}" "$(mutate "${valid_changelog}" 's|^\[0\.1\.23\]: https://github.com/3leaps/docpresser/|[0.1.23]: https://github.com/3leaps/other/|')"
+
+expect_rejected "version link compares from a later version" \
+    "which is not earlier" \
+    "${version}" "$(mutate "${valid_changelog}" 's|v0\.1\.22\.\.\.v0\.1\.23|v0.1.24...v0.1.23|')"
+
+expect_rejected "version link defined twice" \
+    "must define the [0.1.23] link exactly once (found 2)" \
+    "${version}" "${valid_changelog}
+[0.1.23]: https://github.com/3leaps/docpresser/compare/v0.1.22...v0.1.23"
+
+expect_rejected "stale unreleased link shadows a correct one" \
+    "must define the [Unreleased] link exactly once (found 2)" \
+    "${version}" "$(mutate "${valid_changelog}" 's|^\[Unreleased\]: .*|[Unreleased]: https://github.com/3leaps/docpresser/compare/v0.1.22...HEAD\
+[Unreleased]: https://github.com/3leaps/docpresser/compare/v0.1.23...HEAD|')"
+
+expect_rejected "unreleased link points at another repository" \
+    "[Unreleased] link must be" \
+    "${version}" "$(mutate "${valid_changelog}" 's|^\[Unreleased\]: https://github.com/3leaps/docpresser/|[Unreleased]: https://github.com/3leaps/other/|')"
 
 # A large changelog whose matching lines come first. A guard that pipes into
 # grep -q under pipefail fails here deterministically: grep exits on the early

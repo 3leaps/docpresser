@@ -8,17 +8,35 @@
 #
 # Checks, against the version in VERSION:
 # - CHANGELOG.md carries a "## [<version>]" section
-# - CHANGELOG.md defines the "[<version>]: " link
-# - CHANGELOG.md points [Unreleased] at v<version>...HEAD
+# - CHANGELOG.md defines the "[<version>]: " link exactly once, pointing at this
+#   repository: compare/v<earlier>...v<version>, or releases/tag/v<version> for
+#   the first release
+# - CHANGELOG.md defines [Unreleased] exactly once, as
+#   compare/v<version>...HEAD in this repository
 #
 # Usage: ./scripts/release-guard-release-surfaces.sh
 
 set -euo pipefail
 
-# validate_release_surfaces <version> <changelog>
+REPO_URL="https://github.com/3leaps/docpresser"
+
+# version_lt <a> <b>: true when x.y.z version a sorts strictly before b.
+version_lt() {
+    local IFS=.
+    local -a a=($1) b=($2)
+    local i
+    for i in 0 1 2; do
+        ((10#${a[i]} < 10#${b[i]})) && return 0
+        ((10#${a[i]} > 10#${b[i]})) && return 1
+    done
+    return 1
+}
+
+# validate_release_surfaces <version> <changelog> [repo_url]
 validate_release_surfaces() {
     local version="$1"
     local changelog="$2"
+    local repo="${3:-$REPO_URL}"
 
     if [ -z "${version}" ]; then
         echo "error: VERSION is empty" >&2
@@ -38,13 +56,37 @@ validate_release_surfaces() {
         return 1
     fi
 
-    if ! grep -qE "^\[${escaped}\]: https://" <<< "${changelog}"; then
-        echo "error: CHANGELOG.md does not define the [${version}] link" >&2
+    local defs count line earlier
+    defs="$(grep -E "^\[${escaped}\]:" <<< "${changelog}" || true)"
+    count="$(grep -c . <<< "${defs}" || true)"
+    if [ "${count}" != 1 ]; then
+        echo "error: CHANGELOG.md must define the [${version}] link exactly once (found ${count})" >&2
         return 1
     fi
+    line="${defs}"
+    if [ "${line}" != "[${version}]: ${repo}/releases/tag/v${version}" ]; then
+        if [[ "${line}" =~ ^\[${escaped}\]:\ (.*)/compare/v([0-9]+\.[0-9]+\.[0-9]+)\.\.\.v${escaped}$ ]] &&
+            [ "${BASH_REMATCH[1]}" = "${repo}" ]; then
+            earlier="${BASH_REMATCH[2]}"
+            if ! version_lt "${earlier}" "${version}"; then
+                echo "error: CHANGELOG.md [${version}] link compares from v${earlier}, which is not earlier" >&2
+                return 1
+            fi
+        else
+            echo "error: CHANGELOG.md [${version}] link must be ${repo}/compare/v<earlier>...v${version} or ${repo}/releases/tag/v${version}" >&2
+            return 1
+        fi
+    fi
 
-    if ! grep -qiE "^\[unreleased\]: https://.*/compare/v${escaped}\.\.\.HEAD$" <<< "${changelog}"; then
-        echo "error: CHANGELOG.md [Unreleased] link does not compare from v${version}" >&2
+    defs="$(grep -iE "^\[unreleased\]:" <<< "${changelog}" || true)"
+    count="$(grep -c . <<< "${defs}" || true)"
+    if [ "${count}" != 1 ]; then
+        echo "error: CHANGELOG.md must define the [Unreleased] link exactly once (found ${count})" >&2
+        return 1
+    fi
+    if [[ ! "${defs}" =~ ^\[[Uu]nreleased\]:\ (.*)$ ]] ||
+        [ "${BASH_REMATCH[1]}" != "${repo}/compare/v${version}...HEAD" ]; then
+        echo "error: CHANGELOG.md [Unreleased] link must be ${repo}/compare/v${version}...HEAD" >&2
         return 1
     fi
 

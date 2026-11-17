@@ -8,7 +8,7 @@ root="$(cd "$(dirname "$0")/.." && pwd -P)"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 mkdir -p "$scratch/repo/scripts"
-cp "$root/scripts/sync-changelog-links.sh" "$scratch/repo/scripts/"
+cp "$root/scripts/sync-changelog-links.sh" "$root/scripts/release-guard-release-surfaces.sh" "$scratch/repo/scripts/"
 changelog="$scratch/repo/CHANGELOG.md"
 base='# Changelog
 
@@ -67,4 +67,9 @@ printf '%s\n' "$base" | sed 's|^\[Unreleased\]: .*|[Unreleased]: https://github.
 refused 'unparseable [Unreleased] footer'
 printf '%s\n%s\n' "$base" '[unreleased]: https://github.com/3leaps/docpresser/compare/v0.1.0...HEAD' > "$changelog"
 refused 'duplicate [Unreleased] footers'
+printf '%s\n' "$base" | sed 's|3leaps/docpresser/compare/v0.1.0...HEAD|3leaps/other/compare/v0.1.0...HEAD|' > "$changelog"
+refused '[Unreleased] footer for another repository'
+echo 0.1.0 > "$scratch/repo/VERSION"
+printf '%s\n' "$base" | sed 's|^\[0.1.0\]: .*|[0.1.0]: https://github.com/3leaps/docpresser/releases/tag/v9.9.9|' > "$changelog"
+refused 'already-synced footer with a wrong version destination'
 echo '[ok] sync-changelog-links controls passed'
