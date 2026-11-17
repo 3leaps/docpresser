@@ -72,4 +72,13 @@ refused '[Unreleased] footer for another repository'
 echo 0.1.0 > "$scratch/repo/VERSION"
 printf '%s\n' "$base" | sed 's|^\[0.1.0\]: .*|[0.1.0]: https://github.com/3leaps/docpresser/releases/tag/v9.9.9|' > "$changelog"
 refused 'already-synced footer with a wrong version destination'
+# Refusals found only after rewriting the links must still leave the file
+# untouched: the rewrite is validated while staged.
+echo 0.2.0 > "$scratch/repo/VERSION"
+printf '%s\n' "$base" | sed '/^## \[0.2.0\]/d' > "$changelog"
+refused 'bump whose version heading is missing'
+printf '%s\n%s\n' "$base" '[0.2.0]: https://github.com/3leaps/docpresser/compare/v0.1.0...v0.2.0' |
+    sed 's|^\[Unreleased\]: .*|[Unreleased]: https://github.com/3leaps/docpresser/compare/v0.1.0...HEAD|' > "$changelog"
+printf '%s\n' '[0.2.0]: https://github.com/3leaps/docpresser/compare/v0.1.0...v0.2.0' >> "$changelog"
+refused 'bump with duplicate current-version definitions'
 echo '[ok] sync-changelog-links controls passed'

@@ -87,17 +87,20 @@ if grep -qE "^\[${VERSION//./\\.}\]:" "$CHANGELOG_FILE"; then
     HAS_VERSION_DEF=1
 fi
 
-# Report success only for footers the release-surface guard accepts, so a
-# wrong destination is never described as synced.
+# Report success only for content the release-surface guard accepts, so a
+# wrong destination is never described as synced. A rewrite is validated while
+# still staged, so a refusal never leaves CHANGELOG.md modified.
+# shellcheck source=scripts/release-guard-release-surfaces.sh
+source "${SCRIPT_DIR}/release-guard-release-surfaces.sh"
 confirm_synced() {
-    "${SCRIPT_DIR}/release-guard-release-surfaces.sh" > /dev/null || {
-        echo "[!!] CHANGELOG footers still fail the release-surface guard" >&2
+    validate_release_surfaces "$VERSION" "$(cat "$1")" > /dev/null || {
+        echo "[!!] CHANGELOG footers would fail the release-surface guard; CHANGELOG.md left unchanged" >&2
         exit 1
     }
 }
 
 if [[ "$PREVIOUS_VERSION" == "$VERSION" && "$HAS_VERSION_DEF" -eq 1 ]]; then
-    confirm_synced
+    confirm_synced "$CHANGELOG_FILE"
     echo "[ok] CHANGELOG compare links already synced for $VERSION"
     exit 0
 fi
@@ -144,9 +147,9 @@ awk \
     }
     ' "$CHANGELOG_FILE" > "$TMP_FILE"
 
+confirm_synced "$TMP_FILE"
 mv "$TMP_FILE" "$CHANGELOG_FILE"
 trap - EXIT
-confirm_synced
 
 if [[ "$HAS_VERSION_DEF" -eq 1 ]]; then
     echo "[ok] CHANGELOG compare links updated for $VERSION"
