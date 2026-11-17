@@ -83,6 +83,22 @@ Set in the shell, never in the repository:
 | `DOCPRESSER_GPG_HOMEDIR`             | Dedicated `0700` GnuPG home outside the repository; never the default GnuPG home         |
 | `LIMENSAFE_CATALOG_PATH`             | Public-surface catalog file outside the repository; required by `make release-preflight` |
 
+Optional inputs (unset means the default shown):
+
+| Variable                           | Default       | Purpose and constraints                                                                                                                                                                                 |
+| ---------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DOCPRESSER_APPROVED_ENV_LOADER`   | unset         | Maintainer shell file sourced by the tag targets before their guards run. When set it must be an absolute, readable regular file (not a symlink) outside the repository, and it must exit successfully. |
+| `DOCPRESSER_REQUIRE_TAG`           | `0`           | `1` makes `make release-guard-tag-version` require `DOCPRESSER_RELEASE_TAG` instead of defaulting to `v<VERSION>`.                                                                                      |
+| `DOCPRESSER_LIMENSAFE_BIN`         | `limensafe`   | Absolute path to the public-surface scanner when it is not on `PATH`.                                                                                                                                   |
+| `DOCPRESSER_SURFACE_SCOPE`         | `pr`          | `release` scans every commit message in history; the release targets set it themselves.                                                                                                                 |
+| `DOCPRESSER_SURFACE_BASE`          | `origin/main` | Base commit for the pull-request commit-message scan.                                                                                                                                                   |
+| `DOCPRESSER_SURFACE_PR_TEXT`       | unset         | Non-empty file holding the pull-request title and body to scan.                                                                                                                                         |
+| `DOCPRESSER_SURFACE_SCAN_REQUIRED` | `0`           | `1` fails instead of skipping when `LIMENSAFE_CATALOG_PATH` is unset; the release targets set it themselves.                                                                                            |
+
+Must stay unset: `DOCPRESSER_SURFACE_RELEASE_BASE` (the release scan refuses
+any override of its base) and `DOCPRESSER_TEST_FAIL_ANCHOR_INSTALL` (a
+fault-injection hook used only by the tooling tests).
+
 The tag comes only from `DOCPRESSER_RELEASE_TAG`. The version guard and the
 tag targets refuse to start while the generic `RELEASE_TAG` is set, even to an
 empty value, so `unset RELEASE_TAG` first.
