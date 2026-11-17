@@ -219,14 +219,31 @@ reject_nul "${nul_file}" || {
 rm -f "${nul_file}"
 echo "[ok] rejected: NUL byte in CHANGELOG.md"
 
+# Version components are at most nine digits, so no footer label can approach
+# the 999-character limit past which Markdown stops reading a definition.
+long_label="0.0.$(printf '1%.0s' $(seq 1 996))"
+expect_rejected "1000-character label before the footer" "${F}" \
+    "${version}" "$(mutate "${valid_changelog}" "s|^\\[Unreleased\\]:|[${long_label}]: ${R}/releases/tag/v${long_label}\\
+&|")"
+expect_rejected "1000-character label between the required definitions" "${F}" \
+    "${version}" "$(mutate "${valid_changelog}" "s|^\\(\\[0\\.1\\.23\\]: .*\\)|[${long_label}]: ${R}/releases/tag/v${long_label}\\
+\\1|")"
+expect_rejected "ten-digit footer component" "${F}" \
+    "${version}" "$(mutate "${valid_changelog}" "s|^\\[Unreleased\\]:|[0.0.1000000000]: ${R}/releases/tag/v0.0.1000000000\\
+&|")"
+expect_accepted "nine-digit footer component" \
+    "${version}" "$(mutate "${valid_changelog}" "s|^\\[0\\.1\\.22\\]: .*|[0.1.22]: ${R}/compare/v0.1.999999999...v0.1.22|")"
+expect_rejected "required version with an over-long component" "is not x.y.z" \
+    "0.0.1000000000" "${valid_changelog}"
+
 # The earlier-version check compares decimal strings, so components beyond the
 # shell's integer range cannot wrap to a smaller number.
 expect_rejected "earlier version that wraps 64-bit arithmetic" \
-    "which is not earlier" \
+    "definition for this repository" \
     "${version}" "$(mutate "${valid_changelog}" 's|v0\.1\.22\.\.\.v0\.1\.23|v18446744073709551616.0.0...v0.1.23|')"
 
 expect_rejected "earlier version past the signed 64-bit range" \
-    "which is not earlier" \
+    "definition for this repository" \
     "${version}" "$(mutate "${valid_changelog}" 's|v0\.1\.22\.\.\.v0\.1\.23|v9223372036854775808.0.0...v0.1.23|')"
 
 expect_rejected "earlier version with a leading zero component" \

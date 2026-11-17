@@ -53,7 +53,7 @@ if [[ -z "$VERSION" ]]; then
     exit 1
 fi
 
-if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$ ]]; then
     echo "[!!] Invalid version format: $VERSION (expected x.y.z)" >&2
     exit 1
 fi

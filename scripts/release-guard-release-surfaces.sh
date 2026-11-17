@@ -73,7 +73,10 @@ validate_release_surfaces() {
         echo "error: VERSION is empty" >&2
         return 1
     fi
-    if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    # Components are canonical and at most nine digits, which keeps every
+    # footer label far below the 999-character limit beyond which Markdown no
+    # longer reads a line as a link definition.
+    if [[ ! "${version}" =~ ^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$ ]]; then
         echo "error: VERSION ${version} is not x.y.z" >&2
         return 1
     fi
@@ -110,7 +113,7 @@ validate_release_surfaces() {
     # Every footer destination is one of this repository's fixed URL shapes, so
     # no destination can carry Markdown syntax (parentheses, escapes, spaces)
     # that would turn the footer back into paragraph text.
-    local v='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)' base
+    local v='(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})' base
     base="$(sed 's/[.]/\\./g' <<< "${repo}")"
     if LC_ALL=C grep -vqE "^\[(${v}|[Uu]nreleased)\]: ${base}/(compare/v${v}\.\.\.(v${v}|HEAD)|releases/tag/v${v})\$" <<< "${footer}"; then
         echo "error: CHANGELOG.md footer lines must each be a canonical [label]: https://... definition for this repository" >&2
@@ -125,7 +128,7 @@ validate_release_surfaces() {
     fi
     line="${defs}"
     if [ "${line}" != "[${version}]: ${repo}/releases/tag/v${version}" ]; then
-        if [[ "${line}" =~ ^\[${escaped}\]:\ (.*)/compare/v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))\.\.\.v${escaped}$ ]] &&
+        if [[ "${line}" =~ ^\[${escaped}\]:\ (.*)/compare/v((0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8}))\.\.\.v${escaped}$ ]] &&
             [ "${BASH_REMATCH[1]}" = "${repo}" ]; then
             earlier="${BASH_REMATCH[2]}"
             if ! version_lt "${earlier}" "${version}"; then
