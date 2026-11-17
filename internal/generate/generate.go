@@ -42,7 +42,7 @@ func (r *splitMix64) intn(n int) int {
 	if n <= 1 {
 		return 0
 	}
-	return int(r.next() % uint64(n))
+	return int(r.next() % uint64(n)) // #nosec G115 -- remainder is below n, a positive int
 }
 
 func (r *splitMix64) token(prefix string) string {
