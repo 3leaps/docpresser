@@ -6,7 +6,7 @@ set -euo pipefail
 # (GIT_*), and no replacement refs.
 for _git_var in $(compgen -e); do
     case "$_git_var" in
-        GIT_COMMITTER_NAME | GIT_COMMITTER_EMAIL | GIT_AUTHOR_NAME | GIT_AUTHOR_EMAIL) ;;
+        GIT_COMMITTER_NAME | GIT_COMMITTER_EMAIL | GIT_AUTHOR_NAME | GIT_AUTHOR_EMAIL | GIT_CONFIG_NOSYSTEM) ;;
         GIT_*) unset "$_git_var" ;;
     esac
 done

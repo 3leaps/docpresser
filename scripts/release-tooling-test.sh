@@ -19,17 +19,21 @@ actual="$(find "$root/scripts" -maxdepth 1 -name '*.test.sh' -print | sed 's|.*/
 # environment so a real tag, keyring, key id or catalog can never leak into a
 # fixture; only the designated checker path is passed through. Every GIT_*
 # variable is cleared too (repository redirects such as GIT_DIR, and injected
-# configuration such as GIT_CONFIG_COUNT/GIT_CONFIG_PARAMETERS), system git
-# configuration is ignored, and global configuration is a sealed file holding
-# only a fixture identity with signing off, so no suite can reach an operator
-# repository or signing setup.
+# configuration such as GIT_CONFIG_COUNT/GIT_CONFIG_PARAMETERS).
+#
+# Git configuration is sealed in a way the production scripts' own GIT_* scrubs
+# cannot undo when a suite sources them: HOME and XDG_CONFIG_HOME point at a
+# private directory whose only git configuration is a fixture identity with
+# signing off, and GIT_CONFIG_NOSYSTEM=1 (which those scrubs keep) hides system
+# configuration. A self-check below proves the seal survives a sourced scrub.
 scrub=()
 while IFS= read -r name; do
     [[ "$name" == DOCPRESSER_DECERNOR_BIN ]] || scrub+=(-u "$name")
-done < <(compgen -e | grep -E '^(DOCPRESSER_|LIMENSAFE_|GNUPGHOME$|GIT_)' || true)
-gitconfig="$(mktemp "${TMPDIR:-/tmp}/release-tooling-gitconfig.XXXXXX")"
-trap 'rm -f "$gitconfig"' EXIT
-cat > "$gitconfig" << 'GITCONFIG'
+done < <(compgen -e | grep -E '^(DOCPRESSER_|LIMENSAFE_|GNUPGHOME$|GIT_|XDG_CONFIG_HOME$)' || true)
+sealed_home="$(mktemp -d "${TMPDIR:-/tmp}/release-tooling-home.XXXXXX")"
+trap 'rm -rf "$sealed_home"' EXIT
+mkdir -m 700 "$sealed_home/.config"
+cat > "$sealed_home/.gitconfig" << 'GITCONFIG'
 [user]
 	name = Release Tooling Fixture
 	email = fixture@example.invalid
@@ -40,9 +44,23 @@ cat > "$gitconfig" << 'GITCONFIG'
 [init]
 	defaultBranch = main
 GITCONFIG
+sealed() {
+    env ${scrub[@]+"${scrub[@]}"} HOME="$sealed_home" XDG_CONFIG_HOME="$sealed_home/.config" \
+        GIT_CONFIG_NOSYSTEM=1 "$@"
+}
+sealed bash -c '
+    source "$1/scripts/release-tag-common.sh" > /dev/null 2>&1 || true
+    [[ "${GIT_CONFIG_NOSYSTEM:-}" == 1 ]] &&
+        [[ "$(git config --get user.email)" == fixture@example.invalid ]] &&
+        [[ "$(git config --get commit.gpgsign)" == false ]] &&
+        [[ "$(git config --get tag.gpgsign)" == false ]] &&
+        [[ -z "$(git config --get gpg.program)" ]]
+' _ "$root" || {
+    echo 'error: sealed git configuration did not survive a sourced production scrub' >&2
+    exit 1
+}
 while IFS= read -r suite; do
     [[ -n "$suite" ]] || continue
-    env ${scrub[@]+"${scrub[@]}"} GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$gitconfig" \
-        "$root/scripts/$suite.test.sh"
+    sealed "$root/scripts/$suite.test.sh"
 done < "$suites"
 echo "[ok] all $(wc -l < "$suites" | tr -d ' ') release tooling suites passed"
