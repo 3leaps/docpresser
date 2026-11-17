@@ -83,6 +83,28 @@ expect_fail env DOCPRESSER_TAGGER_NAME=$'bad\nname' bash -c 'source "$1"; tag_id
 expect_fail env DOCPRESSER_TAGGER_EMAIL='a<b>' bash -c 'source "$1"; tag_identity' _ "$root/scripts/release-tag-common.sh"
 expect_fail env -u DOCPRESSER_TAG_MESSAGE_DIR bash -c 'source "$1"; tag_message_file' _ "$root/scripts/release-tag-common.sh"
 expect_fail env DOCPRESSER_TAG_MESSAGE_DIR="$scratch" bash -c 'source "$1"; tag_message_file' _ "$root/scripts/release-tag-common.sh"
+# The operator signing selector must equal the committed signing-subkey file
+# plus the exact-selection "!". Each case changes one thing.
+sel_root="$scratch/selector-root"
+mkdir -p "$sel_root/config/release"
+sel_sub="$(printf '%040d' 0 | tr 0 B)"
+printf '%s\n' "$sel_sub" > "$sel_root/config/release/signing-subkey.txt"
+selector_check() { DOCPRESSER_PGP_KEY_ID="$1" bash -c 'source "$1"; tag_root="$2"; tag_committed_selector' _ "$root/scripts/release-tag-common.sh" "$sel_root"; }
+selector_check "$sel_sub!" > /dev/null 2>&1 || {
+    echo 'error: committed selector positive control rejected' >&2
+    exit 1
+}
+expect_fail selector_check "$sel_sub"
+expect_fail selector_check "$(printf '%040d' 0 | tr 0 C)!"
+expect_fail selector_check ""
+printf '%s\n' "$(printf '%039d' 0 | tr 0 B)" > "$sel_root/config/release/signing-subkey.txt"
+expect_fail selector_check "$(printf '%039d' 0 | tr 0 B)!"
+rm "$sel_root/config/release/signing-subkey.txt"
+ln -s /dev/null "$sel_root/config/release/signing-subkey.txt"
+expect_fail selector_check "$sel_sub!"
+rm "$sel_root/config/release/signing-subkey.txt"
+expect_fail selector_check "$sel_sub!"
+echo '[ok] committed signing-subkey selector controls passed'
 export DOCPRESSER_PGP_KEY_ID=0123456789ABCDEF
 expect_fail tag_selector_shape
 # 40-hex without the trailing '!' must be refused.

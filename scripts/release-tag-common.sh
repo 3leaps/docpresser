@@ -448,6 +448,22 @@ tag_prepare_signing_home() {
     export GNUPGHOME="$DOCPRESSER_GPG_HOMEDIR"
 }
 
+# tag_committed_selector: the operator selector must name the committed signing
+# subkey exactly, so signing and verification bind to the same committed
+# selector.
+tag_committed_selector() {
+    local file="$tag_root/config/release/signing-subkey.txt" committed_subkey
+    [[ -f "$file" && ! -L "$file" ]] || {
+        tag_die 'committed signing-subkey selector missing'
+        return 1
+    }
+    committed_subkey="$(tr -d '[:space:]' < "$file")"
+    [[ "$committed_subkey" =~ ^[0-9A-F]{40}$ && "${DOCPRESSER_PGP_KEY_ID:-}" == "$committed_subkey!" ]] || {
+        tag_die 'operator signing subkey differs from committed selector'
+        return 1
+    }
+}
+
 tag_key_selector() {
     tag_selector_shape || return 1
     resolve_release_decernor ceremony || {
@@ -459,6 +475,7 @@ tag_key_selector() {
         tag_die 'operator fingerprint differs from committed anchor'
         return 1
     }
+    tag_committed_selector || return 1
     tag_bind_operator_gnupg_home || return 1
     tag_fresh_verify_gnupg_home || return 1
     if ! gpg --homedir "$TAG_VERIFY_GNUPGHOME" --batch --quiet --import \

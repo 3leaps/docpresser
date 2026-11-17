@@ -36,6 +36,7 @@ git -C "$src" config commit.gpgsign false
 mkdir -p "$src/scripts" "$src/docs/security" "$src/keys" "$src/config/release"
 cp "$root/scripts/"{verify-pinned-tag.sh,validate-release-anchors.sh,release-verify-published-tag.sh,release-decernor.sh,release-gh.sh} "$src/scripts/"
 cp "$root/config/release/tagger-identity.txt" "$src/config/release/"
+printf '%s\n' "$subkey" > "$src/config/release/signing-subkey.txt"
 gpg --batch --armor --export "$primary" > "$src/docs/security/release-signing-keys.asc"
 "$bin" fingerprint "$src/docs/security/release-signing-keys.asc" --class public --kind gpg \
     --format ndjson --path-mode none --gpg-role primary > "$scratch/gpg.ndjson"

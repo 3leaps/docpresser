@@ -86,6 +86,7 @@ git -C "$fixture" config commit.gpgsign false
 mkdir -p "$fixture/docs/security" "$fixture/keys" "$fixture/scripts" "$fixture/config/release"
 cp "$root/scripts/verify-pinned-tag.sh" "$root/scripts/validate-release-anchors.sh" "$root/scripts/release-decernor.sh" "$fixture/scripts/"
 cp "$root/config/release/tagger-identity.txt" "$fixture/config/release/"
+printf '%s\n' "$subkey" > "$fixture/config/release/signing-subkey.txt"
 gpg --batch --armor --export "$primary" > "$fixture/docs/security/release-signing-keys.asc"
 "$bin" fingerprint "$fixture/docs/security/release-signing-keys.asc" --class public --kind gpg \
     --format ndjson --path-mode none --gpg-role primary > "$scratch/gpg.ndjson"
@@ -166,6 +167,17 @@ commit_and_expect_fail
 cp "$scratch/anchors-ndjson.good" "$fixture/keys/expected-fingerprints.ndjson"
 git -C "$fixture" rm -q keys/expected-fingerprints.txt
 commit_and_expect_fail
+# The committed signing-subkey selector must name the pinned signing subkey.
+# Each mutation touches only the selector file.
+printf '%s\n' "$primary" > "$fixture/config/release/signing-subkey.txt"
+commit_and_expect_fail
+printf '%040d\n' 0 | tr 0 A > "$fixture/config/release/signing-subkey.txt"
+commit_and_expect_fail
+printf '%s!\n' "$subkey" > "$fixture/config/release/signing-subkey.txt"
+commit_and_expect_fail
+git -C "$fixture" rm -q config/release/signing-subkey.txt
+commit_and_expect_fail
+echo '[ok] committed signing-subkey selector controls passed'
 # The working tree is never the trust root: a tampered or deleted working-tree
 # pin and anchors cannot change the result while the commit is unchanged.
 printf 'gpg %s\n' "$(printf '%040d' 0)" > "$fixture/keys/expected-fingerprints.txt"
@@ -220,6 +232,7 @@ commit_and_expect_fail
 pin_blob="$(git -C "$fixture" --no-replace-objects rev-parse "$good:docs/security/release-signing-keys.asc")"
 txt_blob="$(git -C "$fixture" --no-replace-objects rev-parse "$good:keys/expected-fingerprints.txt")"
 ndjson_blob="$(git -C "$fixture" --no-replace-objects rev-parse "$good:keys/expected-fingerprints.ndjson")"
+selector_blob="$(git -C "$fixture" --no-replace-objects rev-parse "$good:config/release/signing-subkey.txt")"
 git -C "$fixture" replace "$pin_blob" "$(printf 'not a key\n' | git -C "$fixture" hash-object -w --stdin)"
 verify > /dev/null
 git -C "$fixture" replace -d "$pin_blob" > /dev/null
@@ -242,6 +255,8 @@ expect_fail verify
 git -C "$fixture" replace "$pin_blob" "$(git -C "$fixture" hash-object -w "$scratch/extra.asc")"
 git -C "$fixture" replace "$txt_blob" "$(git -C "$fixture" hash-object -w "$scratch/extra.txt")"
 git -C "$fixture" replace "$ndjson_blob" "$(git -C "$fixture" hash-object -w "$scratch/extra.ndjson")"
+printf '%s\n' "$extra_sub" > "$scratch/extra-selector.txt"
+git -C "$fixture" replace "$selector_blob" "$(git -C "$fixture" hash-object -w "$scratch/extra-selector.txt")"
 expect_fail verify
 # Prove the test fails if GIT_NO_REPLACE_OBJECTS=1 is removed.
 sed 's/export GIT_NO_REPLACE_OBJECTS=1/:/g' "$fixture/scripts/verify-pinned-tag.sh" > "$fixture/scripts/unprotected-verify.sh"

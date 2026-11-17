@@ -61,6 +61,7 @@ committed docs/security/release-signing-keys.asc "$pin"
 committed keys/expected-fingerprints.txt "$anchors"
 committed keys/expected-fingerprints.ndjson "$anchors_ndjson"
 committed config/release/tagger-identity.txt "$keyring/tagger-identity.txt"
+committed config/release/signing-subkey.txt "$keyring/signing-subkey.txt"
 # Decernor is the designated checker. The listing script is secondary.
 # shellcheck source=scripts/release-decernor.sh
 source "$(dirname "$0")/release-decernor.sh"
@@ -84,6 +85,12 @@ signing_subkeys="$(GNUPGHOME="$keyring/home" gpg --batch --with-colons --with-su
     die 'pin must hold exactly one signing subkey'
 permitted="$signing_subkeys"
 [[ "$permitted" =~ ^[0-9A-F]{40}$ && "$permitted" != "$primary" ]] || die 'pinned signing subkey malformed'
+# The committed selector names the one signing subkey release ceremonies use;
+# the pin must carry exactly that subkey, so the pin and the selector cannot
+# drift apart unnoticed.
+committed_subkey="$(tr -d '[:space:]' < "$keyring/signing-subkey.txt")"
+[[ "$committed_subkey" =~ ^[0-9A-F]{40}$ ]] || die 'committed signing-subkey selector malformed'
+[[ "$permitted" == "$committed_subkey" ]] || die 'pinned signing subkey does not match committed selector'
 GNUPGHOME="$keyring/home" git -c gpg.format=openpgp -c gpg.program=gpg -c gpg.openpgp.program=gpg verify-tag --raw "$object" > "$keyring/status" 2>&1 || {
     awk '$1=="[GNUPG:]" {print "signature status:", $2}' "$keyring/status" >&2
     die 'tag signature invalid under pin'
