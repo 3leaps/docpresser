@@ -106,7 +106,8 @@ empty value, so `unset RELEASE_TAG` first.
 ### Tagging (maintainer machine)
 
 - [ ] Remote tag-protection ruleset and immutable-releases setting:
-      `make release-github-preflight`
+      `make release-github-preflight` (needs a GitHub token with repository
+      admin access, which can read the ruleset's bypass list)
 - [ ] Pre-tag gate on the merged `main` commit (committed anchor verification,
       `make surface-scan-release`, changelog and compare links, GitHub
       preflight, content-check, dates check, clean-clone test outside the home

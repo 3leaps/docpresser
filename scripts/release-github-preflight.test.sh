@@ -102,12 +102,10 @@ write_good_fixtures
 check
 grep -q "OrganizationAdmin only" "$scratch/out"
 
-# Read-only token view: GitHub omits `bypass_actors`; preflight still passes and
-# notes that bypass_actors was not visible.
-write_good_fixtures
-mutate_json "$scratch/fx/ruleset.json" 'del(.bypass_actors)'
-check
-grep -q "bypass_actors: not visible, not checked" "$scratch/out"
+# Read-only token view: GitHub omits `bypass_actors`. An unseen bypass list
+# could hide an extra actor, so the preflight fails closed and says why.
+refused "bypass_actors not visible" mutate_json "$scratch/fx/ruleset.json" 'del(.bypass_actors)'
+grep -q "bypass list is not visible to this token" "$scratch/out"
 
 # Ruleset drift.
 refused "disabled ruleset" mutate_json "$scratch/fx/ruleset.json" '.enforcement = "disabled"'

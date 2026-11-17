@@ -40,9 +40,9 @@ ruleset_id="$(jq -r --arg name "$ruleset_name" '
 ruleset="$(release_gh api "repos/$repo/rulesets/$ruleset_id")" ||
     die "could not read ruleset $ruleset_id on $repo"
 
-# GitHub omits `bypass_actors` when the caller lacks repository admin access;
-# every other ruleset field is visible to any reader. Validate the ruleset shape
-# unconditionally, and check `bypass_actors` when the API returned it.
+# GitHub omits `bypass_actors` when the caller lacks repository admin access.
+# An unseen bypass list could hide an extra actor able to rewrite v* tags, so
+# the preflight fails closed: run it with a token that can read the list.
 jq -e --arg repo "$repo" --arg name "$ruleset_name" '
 	.name == $name and
 	.source_type == "Repository" and
@@ -58,24 +58,19 @@ jq -e --arg repo "$repo" --arg name "$ruleset_name" '
 		"update"
 	] and
 	([.rules[] | has("parameters")] | all(. == false)) and
-	(
-		.bypass_actors == null or
-		.bypass_actors == [
-			{
-				"actor_id": null,
-				"actor_type": "OrganizationAdmin",
-				"bypass_mode": "always"
-			}
-		]
-	)
-' <<< "$ruleset" > /dev/null ||
+	.bypass_actors == [
+		{
+			"actor_id": null,
+			"actor_type": "OrganizationAdmin",
+			"bypass_mode": "always"
+		}
+	]
+' <<< "$ruleset" > /dev/null || {
+    [[ "$(jq -r 'has("bypass_actors")' <<< "$ruleset")" == true ]] ||
+        die "ruleset '$ruleset_name' ($ruleset_id) bypass list is not visible to this token; rerun with repository admin access"
     die "ruleset '$ruleset_name' ($ruleset_id) on $repo does not match the required tag protection policy"
-
-bypass_note="OrganizationAdmin only"
-if [[ "$(jq -r '.bypass_actors == null' <<< "$ruleset")" == true ]]; then
-    bypass_note="bypass_actors: not visible, not checked"
-fi
-echo "[ok] ruleset '$ruleset_name' ($ruleset_id): active, refs/tags/v* protected ($bypass_note)"
+}
+echo "[ok] ruleset '$ruleset_name' ($ruleset_id): active, refs/tags/v* protected (OrganizationAdmin only)"
 
 immutable="$(release_gh api "repos/$repo/immutable-releases")" ||
     die "could not read immutable-releases for $repo"
