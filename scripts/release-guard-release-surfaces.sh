@@ -20,16 +20,42 @@ set -euo pipefail
 
 REPO_URL="https://github.com/3leaps/docpresser"
 
-# version_lt <a> <b>: true when x.y.z version a sorts strictly before b.
+# version_lt <a> <b>: true when x.y.z version a sorts strictly before b. Each
+# component is compared as a decimal string (leading zeros dropped, then length,
+# then digits), so arbitrarily long components cannot overflow shell arithmetic.
 version_lt() {
     local IFS=.
     local -a a=($1) b=($2)
-    local i
+    local i x y
     for i in 0 1 2; do
-        ((10#${a[i]} < 10#${b[i]})) && return 0
-        ((10#${a[i]} > 10#${b[i]})) && return 1
+        x="${a[i]#"${a[i]%%[!0]*}"}"
+        y="${b[i]#"${b[i]%%[!0]*}"}"
+        if [ "${#x}" -ne "${#y}" ]; then
+            [ "${#x}" -lt "${#y}" ]
+            return
+        fi
+        if [ "${x}" != "${y}" ]; then
+            [[ "${x}" < "${y}" ]]
+            return
+        fi
     done
     return 1
+}
+
+# effective_markdown <text>: the text with fenced code blocks removed, so link
+# definitions shown as examples inside fences are never counted.
+effective_markdown() {
+    awk '
+        /^ {0,3}(```|~~~)/ { fenced = !fenced; next }
+        !fenced { print }
+    ' <<< "$1"
+}
+
+# definition_lines <text> <label-regex>: every line that CommonMark could treat
+# as a definition of the label: up to any indentation, padding inside the
+# brackets, either case. Callers require exactly one, in canonical form.
+definition_lines() {
+    grep -iE "^[[:space:]]*\[[[:space:]]*$2[[:space:]]*\]:" <<< "$1" || true
 }
 
 # validate_release_surfaces <version> <changelog> [repo_url]
@@ -56,8 +82,10 @@ validate_release_surfaces() {
         return 1
     fi
 
-    local defs count line earlier
-    defs="$(grep -E "^\[${escaped}\]:" <<< "${changelog}" || true)"
+    local effective defs count line earlier
+    effective="$(effective_markdown "${changelog}")"
+
+    defs="$(definition_lines "${effective}" "${escaped}")"
     count="$(grep -c . <<< "${defs}" || true)"
     if [ "${count}" != 1 ]; then
         echo "error: CHANGELOG.md must define the [${version}] link exactly once (found ${count})" >&2
@@ -65,7 +93,7 @@ validate_release_surfaces() {
     fi
     line="${defs}"
     if [ "${line}" != "[${version}]: ${repo}/releases/tag/v${version}" ]; then
-        if [[ "${line}" =~ ^\[${escaped}\]:\ (.*)/compare/v([0-9]+\.[0-9]+\.[0-9]+)\.\.\.v${escaped}$ ]] &&
+        if [[ "${line}" =~ ^\[${escaped}\]:\ (.*)/compare/v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))\.\.\.v${escaped}$ ]] &&
             [ "${BASH_REMATCH[1]}" = "${repo}" ]; then
             earlier="${BASH_REMATCH[2]}"
             if ! version_lt "${earlier}" "${version}"; then
@@ -78,7 +106,7 @@ validate_release_surfaces() {
         fi
     fi
 
-    defs="$(grep -iE "^\[unreleased\]:" <<< "${changelog}" || true)"
+    defs="$(definition_lines "${effective}" "unreleased")"
     count="$(grep -c . <<< "${defs}" || true)"
     if [ "${count}" != 1 ]; then
         echo "error: CHANGELOG.md must define the [Unreleased] link exactly once (found ${count})" >&2

@@ -128,6 +128,48 @@ expect_rejected "unreleased link points at another repository" \
     "[Unreleased] link must be" \
     "${version}" "$(mutate "${valid_changelog}" 's|^\[Unreleased\]: https://github.com/3leaps/docpresser/|[Unreleased]: https://github.com/3leaps/other/|')"
 
+# Definitions are counted the way Markdown resolves them: an indented or
+# bracket-padded definition still defines the label, and the first one wins, so
+# any second form is ambiguous; definitions inside fenced code create no link.
+expect_rejected "indented wrong version definition shadows the real one" \
+    "must define the [0.1.23] link exactly once (found 2)" \
+    "${version}" "$(printf '   [0.1.23]: https://github.com/3leaps/docpresser/releases/tag/v9.9.9\n%s\n' "${valid_changelog}")"
+
+expect_rejected "bracket-padded wrong version definition shadows the real one" \
+    "must define the [0.1.23] link exactly once (found 2)" \
+    "${version}" "$(printf '[ 0.1.23 ]: https://github.com/3leaps/docpresser/releases/tag/v9.9.9\n%s\n' "${valid_changelog}")"
+
+expect_rejected "padded unreleased definition shadows the real one" \
+    "must define the [Unreleased] link exactly once (found 2)" \
+    "${version}" "$(printf '  [ unreleased ]: https://github.com/3leaps/docpresser/compare/v0.1.22...HEAD\n%s\n' "${valid_changelog}")"
+
+expect_rejected "sole version definition is not canonical" \
+    "[0.1.23] link must be" \
+    "${version}" "$(mutate "${valid_changelog}" 's|^\[0\.1\.23\]: |  [0.1.23]: |')"
+
+expect_rejected "version definition only inside a fenced block" \
+    "must define the [0.1.23] link exactly once (found 0)" \
+    "${version}" "$(mutate "${valid_changelog}" 's|^\(\[0\.1\.23\]: .*\)|```\
+\1\
+```|')"
+
+expect_accepted "wrong definition inside a fenced example is ignored" \
+    "${version}" "$(printf '~~~\n[0.1.23]: https://example.invalid/\n~~~\n%s\n' "${valid_changelog}")"
+
+# The earlier-version check compares decimal strings, so components beyond the
+# shell's integer range cannot wrap to a smaller number.
+expect_rejected "earlier version that wraps 64-bit arithmetic" \
+    "which is not earlier" \
+    "${version}" "$(mutate "${valid_changelog}" 's|v0\.1\.22\.\.\.v0\.1\.23|v18446744073709551616.0.0...v0.1.23|')"
+
+expect_rejected "earlier version past the signed 64-bit range" \
+    "which is not earlier" \
+    "${version}" "$(mutate "${valid_changelog}" 's|v0\.1\.22\.\.\.v0\.1\.23|v9223372036854775808.0.0...v0.1.23|')"
+
+expect_rejected "earlier version with a leading zero component" \
+    "[0.1.23] link must be" \
+    "${version}" "$(mutate "${valid_changelog}" 's|v0\.1\.22\.\.\.v0\.1\.23|v0.1.022...v0.1.23|')"
+
 # A large changelog whose matching lines come first. A guard that pipes into
 # grep -q under pipefail fails here deterministically: grep exits on the early
 # match and the still-writing producer dies of SIGPIPE.
