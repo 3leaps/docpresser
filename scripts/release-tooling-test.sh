@@ -48,17 +48,21 @@ sealed() {
     env ${scrub[@]+"${scrub[@]}"} HOME="$sealed_home" XDG_CONFIG_HOME="$sealed_home/.config" \
         GIT_CONFIG_NOSYSTEM=1 "$@"
 }
-# The self-check runs inside the sealed home, outside any repository, so a
-# repository-local identity or signing setting in this checkout (which never
-# reaches freshly initialized fixture repositories) cannot trip it.
+# The self-check reads configuration from inside the sealed home with
+# repository discovery stopped at that directory (GIT_CEILING_DIRECTORIES is set
+# on each git call, after the sourced scrub), so a repository-local identity or
+# signing setting in an enclosing checkout, even when TMPDIR lies inside one,
+# cannot trip it. Such settings never reach freshly initialized fixtures.
 sealed bash -c '
     cd "$2" || exit 1
     source "$1/scripts/release-tag-common.sh" > /dev/null 2>&1 || true
-    [[ "${GIT_CONFIG_NOSYSTEM:-}" == 1 ]] &&
-        [[ "$(git config --get user.email)" == fixture@example.invalid ]] &&
-        [[ "$(git config --get commit.gpgsign)" == false ]] &&
-        [[ "$(git config --get tag.gpgsign)" == false ]] &&
-        [[ -z "$(git config --get gpg.program)" ]]
+    cfg() { GIT_CEILING_DIRECTORIES="$(dirname "$2")" git config --get "$1"; }
+    ! GIT_CEILING_DIRECTORIES="$(dirname "$2")" git rev-parse --git-dir > /dev/null 2>&1 &&
+        [[ "${GIT_CONFIG_NOSYSTEM:-}" == 1 ]] &&
+        [[ "$(cfg user.email "$2")" == fixture@example.invalid ]] &&
+        [[ "$(cfg commit.gpgsign "$2")" == false ]] &&
+        [[ "$(cfg tag.gpgsign "$2")" == false ]] &&
+        [[ -z "$(cfg gpg.program "$2")" ]]
 ' _ "$root" "$sealed_home" || {
     echo 'error: sealed git configuration did not survive a sourced production scrub' >&2
     exit 1
