@@ -8,10 +8,14 @@
 #
 # Checks, against the version in VERSION:
 # - CHANGELOG.md carries a "## [<version>]" section
-# - CHANGELOG.md defines the "[<version>]: " link exactly once, pointing at this
-#   repository: compare/v<earlier>...v<version>, or releases/tag/v<version> for
-#   the first release
-# - CHANGELOG.md defines [Unreleased] exactly once, as
+# - link definitions follow a restricted grammar that leaves no Markdown
+#   ambiguity: no fenced code or HTML blocks anywhere, every definition in one
+#   footer block at the end of the file (after a blank line), one canonical
+#   "[label]: https://..." per line, and no "]:" anywhere outside the footer
+# - the footer defines "[<version>]" exactly once, pointing at this repository:
+#   compare/v<earlier>...v<version>, or releases/tag/v<version> for the first
+#   release
+# - the footer defines [Unreleased] exactly once, as
 #   compare/v<version>...HEAD in this repository
 #
 # Usage: ./scripts/release-guard-release-surfaces.sh
@@ -42,20 +46,21 @@ version_lt() {
     return 1
 }
 
-# effective_markdown <text>: the text with fenced code blocks removed, so link
-# definitions shown as examples inside fences are never counted.
-effective_markdown() {
-    awk '
-        /^ {0,3}(```|~~~)/ { fenced = !fenced; next }
-        !fenced { print }
+# split_footer <text>: prints "<footer-start-line>" (1-based) of the trailing
+# block of lines that begin with "[", after trailing blank lines are ignored.
+# Prints 0 when there is no such block or it is not preceded by a blank line.
+split_footer() {
+    LC_ALL=C awk '
+        { line[NR] = $0 }
+        END {
+            n = NR
+            while (n > 0 && line[n] ~ /^[[:space:]]*$/) n--
+            start = n + 1
+            while (start > 1 && substr(line[start - 1], 1, 1) == "[") start--
+            if (start > n || start == 1 || line[start - 1] !~ /^[[:space:]]*$/) { print 0; exit }
+            print start
+        }
     ' <<< "$1"
-}
-
-# definition_lines <text> <label-regex>: every line that CommonMark could treat
-# as a definition of the label: up to any indentation, padding inside the
-# brackets, either case. Callers require exactly one, in canonical form.
-definition_lines() {
-    grep -iE "^[[:space:]]*\[[[:space:]]*$2[[:space:]]*\]:" <<< "$1" || true
 }
 
 # validate_release_surfaces <version> <changelog> [repo_url]
@@ -82,10 +87,32 @@ validate_release_surfaces() {
         return 1
     fi
 
-    local effective defs count line earlier
-    effective="$(effective_markdown "${changelog}")"
+    local start body footer defs count line earlier
+    if LC_ALL=C grep -qE '^[[:space:]]*(```|~~~)' <<< "${changelog}"; then
+        echo "error: CHANGELOG.md must not contain fenced code blocks" >&2
+        return 1
+    fi
+    if LC_ALL=C grep -qE '^[[:space:]]*<' <<< "${changelog}"; then
+        echo "error: CHANGELOG.md must not contain HTML blocks" >&2
+        return 1
+    fi
+    start="$(split_footer "${changelog}")"
+    if [ "${start}" = 0 ]; then
+        echo "error: CHANGELOG.md must end with a link-definition footer after a blank line" >&2
+        return 1
+    fi
+    body="$(LC_ALL=C sed -n "1,$((start - 1))p" <<< "${changelog}")"
+    footer="$(LC_ALL=C sed -n "${start},\$p" <<< "${changelog}" | LC_ALL=C sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}')"
+    if LC_ALL=C grep -q ']:' <<< "${body}"; then
+        echo "error: CHANGELOG.md has a link definition outside the footer" >&2
+        return 1
+    fi
+    if LC_ALL=C grep -vqE '^\[([0-9]+\.[0-9]+\.[0-9]+|[Uu]nreleased)\]: https://[^[:space:]]+$' <<< "${footer}"; then
+        echo "error: CHANGELOG.md footer lines must each be a canonical [label]: https://... definition" >&2
+        return 1
+    fi
 
-    defs="$(definition_lines "${effective}" "${escaped}")"
+    defs="$(LC_ALL=C grep -E "^\[${escaped}\]: " <<< "${footer}" || true)"
     count="$(grep -c . <<< "${defs}" || true)"
     if [ "${count}" != 1 ]; then
         echo "error: CHANGELOG.md must define the [${version}] link exactly once (found ${count})" >&2
@@ -106,14 +133,13 @@ validate_release_surfaces() {
         fi
     fi
 
-    defs="$(definition_lines "${effective}" "unreleased")"
+    defs="$(LC_ALL=C grep -E '^\[[Uu]nreleased\]: ' <<< "${footer}" || true)"
     count="$(grep -c . <<< "${defs}" || true)"
     if [ "${count}" != 1 ]; then
         echo "error: CHANGELOG.md must define the [Unreleased] link exactly once (found ${count})" >&2
         return 1
     fi
-    if [[ ! "${defs}" =~ ^\[[Uu]nreleased\]:\ (.*)$ ]] ||
-        [ "${BASH_REMATCH[1]}" != "${repo}/compare/v${version}...HEAD" ]; then
+    if [ "${defs}" != "[${defs:1:10}]: ${repo}/compare/v${version}...HEAD" ]; then
         echo "error: CHANGELOG.md [Unreleased] link must be ${repo}/compare/v${version}...HEAD" >&2
         return 1
     fi

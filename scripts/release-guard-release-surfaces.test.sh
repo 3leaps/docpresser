@@ -116,8 +116,8 @@ expect_rejected "version link compares from a later version" \
 
 expect_rejected "version link defined twice" \
     "must define the [0.1.23] link exactly once (found 2)" \
-    "${version}" "${valid_changelog}
-[0.1.23]: https://github.com/3leaps/docpresser/compare/v0.1.22...v0.1.23"
+    "${version}" "$(mutate "${valid_changelog}" 's|^\(\[0\.1\.23\]: .*\)|\1\
+\1|')"
 
 expect_rejected "stale unreleased link shadows a correct one" \
     "must define the [Unreleased] link exactly once (found 2)" \
@@ -132,29 +132,56 @@ expect_rejected "unreleased link points at another repository" \
 # bracket-padded definition still defines the label, and the first one wins, so
 # any second form is ambiguous; definitions inside fenced code create no link.
 expect_rejected "indented wrong version definition shadows the real one" \
-    "must define the [0.1.23] link exactly once (found 2)" \
+    "link definition outside the footer" \
     "${version}" "$(printf '   [0.1.23]: https://github.com/3leaps/docpresser/releases/tag/v9.9.9\n%s\n' "${valid_changelog}")"
 
 expect_rejected "bracket-padded wrong version definition shadows the real one" \
-    "must define the [0.1.23] link exactly once (found 2)" \
+    "link definition outside the footer" \
     "${version}" "$(printf '[ 0.1.23 ]: https://github.com/3leaps/docpresser/releases/tag/v9.9.9\n%s\n' "${valid_changelog}")"
 
 expect_rejected "padded unreleased definition shadows the real one" \
-    "must define the [Unreleased] link exactly once (found 2)" \
+    "link definition outside the footer" \
     "${version}" "$(printf '  [ unreleased ]: https://github.com/3leaps/docpresser/compare/v0.1.22...HEAD\n%s\n' "${valid_changelog}")"
 
 expect_rejected "sole version definition is not canonical" \
-    "[0.1.23] link must be" \
+    "must end with a link-definition footer" \
     "${version}" "$(mutate "${valid_changelog}" 's|^\[0\.1\.23\]: |  [0.1.23]: |')"
 
 expect_rejected "version definition only inside a fenced block" \
-    "must define the [0.1.23] link exactly once (found 0)" \
+    "must not contain fenced code blocks" \
     "${version}" "$(mutate "${valid_changelog}" 's|^\(\[0\.1\.23\]: .*\)|```\
 \1\
 ```|')"
 
-expect_accepted "wrong definition inside a fenced example is ignored" \
+expect_rejected "any fenced block, even one holding only an example" \
+    "must not contain fenced code blocks" \
     "${version}" "$(printf '~~~\n[0.1.23]: https://example.invalid/\n~~~\n%s\n' "${valid_changelog}")"
+
+# Restricted grammar: each context in which Markdown could hide, shadow or
+# neutralize a definition is rejected outright.
+W='[0.1.23]: https://github.com/3leaps/docpresser/releases/tag/v9.9.9'
+expect_rejected "definition inside a list item" "link definition outside the footer" \
+    "${version}" "$(printf -- '- %s\n%s\n' "${W}" "${valid_changelog}")"
+expect_rejected "definition inside a blockquote" "link definition outside the footer" \
+    "${version}" "$(printf '> %s\n%s\n' "${W}" "${valid_changelog}")"
+expect_rejected "multi-line label" "link definition outside the footer" \
+    "${version}" "$(printf '[0.1.\n23]: https://github.com/3leaps/docpresser/releases/tag/v9.9.9\n%s\n' "${valid_changelog}")"
+expect_rejected "no-break-space padded label" "link definition outside the footer" \
+    "${version}" "$(printf '[\302\2400.1.23\302\240]: https://example.invalid/\n%s\n' "${valid_changelog}")"
+expect_rejected "em-space padded label" "link definition outside the footer" \
+    "${version}" "$(printf '[\342\200\2030.1.23\342\200\203]: https://example.invalid/\n%s\n' "${valid_changelog}")"
+expect_rejected "HTML block" "must not contain HTML blocks" \
+    "${version}" "$(printf '<div>\n%s\n</div>\n%s\n' "${W}" "${valid_changelog}")"
+expect_rejected "four-backtick fence" "must not contain fenced code blocks" \
+    "${version}" "$(printf '%s\n````\n' "${valid_changelog}")"
+expect_rejected "footer directly after paragraph text" "must end with a link-definition footer" \
+    "${version}" "$(mutate "${valid_changelog}" '/^$/d')"
+expect_rejected "footer line with a title" "canonical [label]: https://... definition" \
+    "${version}" "$(mutate "${valid_changelog}" 's|^\(\[0\.1\.22\]: .*\)|\1 "title"|')"
+expect_rejected "footer line with an angle-bracket destination" "canonical [label]: https://... definition" \
+    "${version}" "$(mutate "${valid_changelog}" 's|^\[0\.1\.22\]: \(.*\)|[0.1.22]: <\1>|')"
+expect_rejected "footer line with a no-break space" "canonical [label]: https://... definition" \
+    "${version}" "$(mutate "${valid_changelog}" "s|^\\[0\\.1\\.22\\]: |[0.1.22]:$(printf '\302\240')|")"
 
 # The earlier-version check compares decimal strings, so components beyond the
 # shell's integer range cannot wrap to a smaller number.
@@ -174,9 +201,10 @@ expect_rejected "earlier version with a leading zero component" \
 # grep -q under pipefail fails here deterministically: grep exits on the early
 # match and the still-writing producer dies of SIGPIPE.
 large_changelog="$(
-    printf '%s\n' "${valid_changelog}" | sed -n '/^\[Unreleased\]/,$p'
     printf '%s\n' "${valid_changelog}" | sed '/^\[/d'
     for _ in $(seq 1 20000); do printf '%s\n' '- Filler entry to keep the producer writing.'; done
+    printf '\n'
+    printf '%s\n' "${valid_changelog}" | sed -n '/^\[Unreleased\]/,$p'
 )"
 expect_accepted "early matches in a large changelog" "${version}" "${large_changelog}"
 
