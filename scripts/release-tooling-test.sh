@@ -48,14 +48,18 @@ sealed() {
     env ${scrub[@]+"${scrub[@]}"} HOME="$sealed_home" XDG_CONFIG_HOME="$sealed_home/.config" \
         GIT_CONFIG_NOSYSTEM=1 "$@"
 }
+# The self-check runs inside the sealed home, outside any repository, so a
+# repository-local identity or signing setting in this checkout (which never
+# reaches freshly initialized fixture repositories) cannot trip it.
 sealed bash -c '
+    cd "$2" || exit 1
     source "$1/scripts/release-tag-common.sh" > /dev/null 2>&1 || true
     [[ "${GIT_CONFIG_NOSYSTEM:-}" == 1 ]] &&
         [[ "$(git config --get user.email)" == fixture@example.invalid ]] &&
         [[ "$(git config --get commit.gpgsign)" == false ]] &&
         [[ "$(git config --get tag.gpgsign)" == false ]] &&
         [[ -z "$(git config --get gpg.program)" ]]
-' _ "$root" || {
+' _ "$root" "$sealed_home" || {
     echo 'error: sealed git configuration did not survive a sourced production scrub' >&2
     exit 1
 }
