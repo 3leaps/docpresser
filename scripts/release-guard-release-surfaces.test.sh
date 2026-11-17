@@ -166,11 +166,11 @@ expect_rejected "definition inside a blockquote" "link definition outside the fo
     "${version}" "$(printf '> %s\n%s\n' "${W}" "${valid_changelog}")"
 expect_rejected "multi-line label" "link definition outside the footer" \
     "${version}" "$(printf '[0.1.\n23]: https://github.com/3leaps/docpresser/releases/tag/v9.9.9\n%s\n' "${valid_changelog}")"
-expect_rejected "no-break-space padded label" "link definition outside the footer" \
+expect_rejected "no-break-space padded label" "only printable ASCII" \
     "${version}" "$(printf '[\302\2400.1.23\302\240]: https://example.invalid/\n%s\n' "${valid_changelog}")"
-expect_rejected "em-space padded label" "link definition outside the footer" \
+expect_rejected "em-space padded label" "only printable ASCII" \
     "${version}" "$(printf '[\342\200\2030.1.23\342\200\203]: https://example.invalid/\n%s\n' "${valid_changelog}")"
-expect_rejected "HTML block" "must not contain HTML blocks" \
+expect_rejected "HTML block" "must not contain '<'" \
     "${version}" "$(printf '<div>\n%s\n</div>\n%s\n' "${W}" "${valid_changelog}")"
 expect_rejected "four-backtick fence" "must not contain fenced code blocks" \
     "${version}" "$(printf '%s\n````\n' "${valid_changelog}")"
@@ -178,9 +178,9 @@ expect_rejected "footer directly after paragraph text" "must end with a link-def
     "${version}" "$(mutate "${valid_changelog}" '/^$/d')"
 expect_rejected "footer line with a title" "canonical [label]: https://... definition" \
     "${version}" "$(mutate "${valid_changelog}" 's|^\(\[0\.1\.22\]: .*\)|\1 "title"|')"
-expect_rejected "footer line with an angle-bracket destination" "canonical [label]: https://... definition" \
+expect_rejected "footer line with an angle-bracket destination" "must not contain '<'" \
     "${version}" "$(mutate "${valid_changelog}" 's|^\[0\.1\.22\]: \(.*\)|[0.1.22]: <\1>|')"
-expect_rejected "footer line with a no-break space" "canonical [label]: https://... definition" \
+expect_rejected "footer line with a no-break space" "only printable ASCII" \
     "${version}" "$(mutate "${valid_changelog}" "s|^\\[0\\.1\\.22\\]: |[0.1.22]:$(printf '\302\240')|")"
 
 # Footer destinations are fixed this-repository URL shapes, so none can carry
@@ -198,7 +198,7 @@ expect_rejected "malformed historical definition between the required ones" "${F
 
 # The separator before the footer must be truly blank (spaces or tabs only).
 for sep in '\013' '\014'; do
-    expect_rejected "separator line holding $sep" "must end with a link-definition footer" \
+    expect_rejected "separator line holding $sep" "only printable ASCII" \
         "${version}" "$(printf '%s\n' "${valid_changelog}" | awk -v s="$(printf "$sep")" '/^\[Unreleased\]:/ && !d {sub(/^$/, s, prev); d=1} NR>1 {print prev} {prev=$0} END {print prev}')"
 done
 
@@ -235,6 +235,26 @@ expect_accepted "nine-digit footer component" \
     "${version}" "$(mutate "${valid_changelog}" "s|^\\[0\\.1\\.22\\]: .*|[0.1.22]: ${R}/compare/v0.1.999999999...v0.1.22|")"
 expect_rejected "required version with an over-long component" "is not x.y.z" \
     "0.0.1000000000" "${valid_changelog}"
+
+# Character-level rules: whole classes are closed wherever they appear. A
+# byte-order mark before a fence or comment, raw HTML inside a list item, a
+# blockquote or inline text, and fence delimiters anywhere are all refused.
+bom="$(printf '\357\273\277')"
+for prefix in "${bom}"'```' "${bom}"'~~~' "${bom}<!--" "${bom}<script>"; do
+    expect_rejected "prefix $(printf '%q' "${prefix}")" "only printable ASCII" \
+        "${version}" "$(printf '%s\n\n%s\n' "${prefix}" "${valid_changelog}")"
+done
+for opener in '- <!--' '> <!--' 'note <script>' '- <script>' '> <script>' '<!-- x -->'; do
+    expect_rejected "raw HTML: ${opener}" "must not contain '<'" \
+        "${version}" "$(printf '%s\n\n%s\n' "${opener}" "${valid_changelog}")"
+done
+for fence in '- ```' '> ~~~' 'text ```inline```' '   ~~~'; do
+    expect_rejected "fence delimiter: ${fence}" "must not contain fenced code blocks" \
+        "${version}" "$(printf '%s\n\n%s\n' "${fence}" "${valid_changelog}")"
+done
+expect_accepted "inline single backticks and a tab-indented line" \
+    "${version}" "$(printf '%s\n' "${valid_changelog}" | sed "s/^- A record\\.\$/- A \`record\` with code.\\
+$(printf '\t')- nested/")"
 
 # The earlier-version check compares decimal strings, so components beyond the
 # shell's integer range cannot wrap to a smaller number.

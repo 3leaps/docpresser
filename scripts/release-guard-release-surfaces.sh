@@ -9,7 +9,8 @@
 # Checks, against the version in VERSION:
 # - CHANGELOG.md carries a "## [<version>]" section
 # - link definitions follow a restricted grammar that leaves no Markdown
-#   ambiguity: no fenced code or HTML blocks anywhere, every definition in one
+#   ambiguity: printable ASCII only, no "<" and no fence delimiters anywhere,
+#   every definition in one
 #   footer block at the end of the file (after a blank line), one canonical
 #   "[label]: https://..." per line, and no "]:" anywhere outside the footer
 # - the footer defines "[<version>]" exactly once, pointing at this repository:
@@ -91,12 +92,20 @@ validate_release_surfaces() {
     fi
 
     local start body footer defs count line earlier
-    if LC_ALL=C grep -qE '^[[:space:]]*(```|~~~)' <<< "${changelog}"; then
-        echo "error: CHANGELOG.md must not contain fenced code blocks" >&2
+    # Character-level rules close whole classes of Markdown ambiguity at once,
+    # wherever they appear (column zero, list items, blockquotes, inline):
+    # printable ASCII only (no byte-order mark, Unicode spaces or control
+    # characters), no "<" (no raw HTML or autolinks), and no fence delimiters.
+    if LC_ALL=C grep -q $'[^\t -~]' <<< "${changelog}"; then
+        echo "error: CHANGELOG.md must contain only printable ASCII, tabs and newlines" >&2
         return 1
     fi
-    if LC_ALL=C grep -qE '^[[:space:]]*<' <<< "${changelog}"; then
-        echo "error: CHANGELOG.md must not contain HTML blocks" >&2
+    if LC_ALL=C grep -q '<' <<< "${changelog}"; then
+        echo "error: CHANGELOG.md must not contain '<' (raw HTML or autolinks)" >&2
+        return 1
+    fi
+    if LC_ALL=C grep -qE '```|~~~' <<< "${changelog}"; then
+        echo "error: CHANGELOG.md must not contain fenced code blocks" >&2
         return 1
     fi
     start="$(split_footer "${changelog}")"
