@@ -107,7 +107,7 @@ expect_rejected "version link points at another release" \
     "${version}" "$(mutate "${valid_changelog}" 's|^\[0\.1\.23\]: .*|[0.1.23]: https://github.com/3leaps/docpresser/releases/tag/v9.9.9|')"
 
 expect_rejected "version link points at another repository" \
-    "[0.1.23] link must be" \
+    "definition for this repository" \
     "${version}" "$(mutate "${valid_changelog}" 's|^\[0\.1\.23\]: https://github.com/3leaps/docpresser/|[0.1.23]: https://github.com/3leaps/other/|')"
 
 expect_rejected "version link compares from a later version" \
@@ -125,7 +125,7 @@ expect_rejected "stale unreleased link shadows a correct one" \
 [Unreleased]: https://github.com/3leaps/docpresser/compare/v0.1.23...HEAD|')"
 
 expect_rejected "unreleased link points at another repository" \
-    "[Unreleased] link must be" \
+    "definition for this repository" \
     "${version}" "$(mutate "${valid_changelog}" 's|^\[Unreleased\]: https://github.com/3leaps/docpresser/|[Unreleased]: https://github.com/3leaps/other/|')"
 
 # Definitions are counted the way Markdown resolves them: an indented or
@@ -183,6 +183,42 @@ expect_rejected "footer line with an angle-bracket destination" "canonical [labe
 expect_rejected "footer line with a no-break space" "canonical [label]: https://... definition" \
     "${version}" "$(mutate "${valid_changelog}" "s|^\\[0\\.1\\.22\\]: |[0.1.22]:$(printf '\302\240')|")"
 
+# Footer destinations are fixed this-repository URL shapes, so none can carry
+# Markdown syntax that turns the footer back into paragraph text.
+R='https://github.com/3leaps/docpresser'
+F="definition for this repository"
+for dest in "${R}/(" "${R})" "${R}/\\)(" "${R}/((((x))))" "https://example.invalid/("; do
+    expect_rejected "footer destination ${dest}" "${F}" \
+        "${version}" "$(mutate "${valid_changelog}" "s|^\\[Unreleased\\]:|[0.0.9]: ${dest}\\
+&|")"
+done
+expect_rejected "malformed historical definition between the required ones" "${F}" \
+    "${version}" "$(mutate "${valid_changelog}" "s|^\\(\\[0\\.1\\.23\\]: .*\\)|[0.0.9]: ${R}/(\\
+\\1|")"
+
+# The separator before the footer must be truly blank (spaces or tabs only).
+for sep in '\013' '\014'; do
+    expect_rejected "separator line holding $sep" "must end with a link-definition footer" \
+        "${version}" "$(printf '%s\n' "${valid_changelog}" | awk -v s="$(printf "$sep")" '/^\[Unreleased\]:/ && !d {sub(/^$/, s, prev); d=1} NR>1 {print prev} {prev=$0} END {print prev}')"
+done
+
+# NUL bytes are refused from the file before command substitution can drop them.
+nul_file="$(mktemp)"
+printf '%s\n' "${valid_changelog}" | sed 's/^$/X/' | tr X '\000' > "${nul_file}"
+if reject_nul "${nul_file}" 2> /dev/null; then
+    rm -f "${nul_file}"
+    echo "error: negative control was accepted: NUL byte in CHANGELOG.md" >&2
+    exit 1
+fi
+printf '%s\n' "${valid_changelog}" > "${nul_file}"
+reject_nul "${nul_file}" || {
+    rm -f "${nul_file}"
+    echo "error: positive control was rejected: CHANGELOG.md without NUL" >&2
+    exit 1
+}
+rm -f "${nul_file}"
+echo "[ok] rejected: NUL byte in CHANGELOG.md"
+
 # The earlier-version check compares decimal strings, so components beyond the
 # shell's integer range cannot wrap to a smaller number.
 expect_rejected "earlier version that wraps 64-bit arithmetic" \
@@ -194,7 +230,7 @@ expect_rejected "earlier version past the signed 64-bit range" \
     "${version}" "$(mutate "${valid_changelog}" 's|v0\.1\.22\.\.\.v0\.1\.23|v9223372036854775808.0.0...v0.1.23|')"
 
 expect_rejected "earlier version with a leading zero component" \
-    "[0.1.23] link must be" \
+    "definition for this repository" \
     "${version}" "$(mutate "${valid_changelog}" 's|v0\.1\.22\.\.\.v0\.1\.23|v0.1.022...v0.1.23|')"
 
 # A large changelog whose matching lines come first. A guard that pipes into

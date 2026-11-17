@@ -54,10 +54,10 @@ split_footer() {
         { line[NR] = $0 }
         END {
             n = NR
-            while (n > 0 && line[n] ~ /^[[:space:]]*$/) n--
+            while (n > 0 && line[n] ~ /^[ \t]*$/) n--
             start = n + 1
             while (start > 1 && substr(line[start - 1], 1, 1) == "[") start--
-            if (start > n || start == 1 || line[start - 1] !~ /^[[:space:]]*$/) { print 0; exit }
+            if (start > n || start == 1 || line[start - 1] !~ /^[ \t]*$/) { print 0; exit }
             print start
         }
     ' <<< "$1"
@@ -102,13 +102,18 @@ validate_release_surfaces() {
         return 1
     fi
     body="$(LC_ALL=C sed -n "1,$((start - 1))p" <<< "${changelog}")"
-    footer="$(LC_ALL=C sed -n "${start},\$p" <<< "${changelog}" | LC_ALL=C sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}')"
+    footer="$(LC_ALL=C sed -n "${start},\$p" <<< "${changelog}" | LC_ALL=C sed -e :a -e '/^[ \t]*$/{$d;N;ba' -e '}')"
     if LC_ALL=C grep -q ']:' <<< "${body}"; then
         echo "error: CHANGELOG.md has a link definition outside the footer" >&2
         return 1
     fi
-    if LC_ALL=C grep -vqE '^\[([0-9]+\.[0-9]+\.[0-9]+|[Uu]nreleased)\]: https://[^[:space:]]+$' <<< "${footer}"; then
-        echo "error: CHANGELOG.md footer lines must each be a canonical [label]: https://... definition" >&2
+    # Every footer destination is one of this repository's fixed URL shapes, so
+    # no destination can carry Markdown syntax (parentheses, escapes, spaces)
+    # that would turn the footer back into paragraph text.
+    local v='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)' base
+    base="$(sed 's/[.]/\\./g' <<< "${repo}")"
+    if LC_ALL=C grep -vqE "^\[(${v}|[Uu]nreleased)\]: ${base}/(compare/v${v}\.\.\.(v${v}|HEAD)|releases/tag/v${v})\$" <<< "${footer}"; then
+        echo "error: CHANGELOG.md footer lines must each be a canonical [label]: https://... definition for this repository" >&2
         return 1
     fi
 
@@ -147,6 +152,15 @@ validate_release_surfaces() {
     return 0
 }
 
+# reject_nul <file>: shell command substitution silently drops NUL bytes, so a
+# file containing one must be refused before its content is read.
+reject_nul() {
+    if [ "$(LC_ALL=C tr -d '\000' < "$1" | wc -c)" != "$(wc -c < "$1")" ]; then
+        echo "error: $(basename "$1") contains a NUL byte" >&2
+        return 1
+    fi
+}
+
 main() {
     local script_dir repo_root version changelog
 
@@ -163,6 +177,7 @@ main() {
         echo "error: CHANGELOG.md not found" >&2
         exit 1
     fi
+    reject_nul "${repo_root}/CHANGELOG.md" || exit 1
     changelog="$(cat "${repo_root}/CHANGELOG.md")"
 
     if ! validate_release_surfaces "${version}" "${changelog}"; then

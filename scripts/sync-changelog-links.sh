@@ -93,6 +93,7 @@ fi
 # shellcheck source=scripts/release-guard-release-surfaces.sh
 source "${SCRIPT_DIR}/release-guard-release-surfaces.sh"
 confirm_synced() {
+    reject_nul "$1" || exit 1
     validate_release_surfaces "$VERSION" "$(cat "$1")" > /dev/null || {
         echo "[!!] CHANGELOG footers would fail the release-surface guard; CHANGELOG.md left unchanged" >&2
         exit 1
