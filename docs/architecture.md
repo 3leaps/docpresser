@@ -7,7 +7,7 @@ result is claimed until verified execution evidence is recorded.
 
 Docpresser is a Go CLI (`github.com/3leaps/docpresser`) for generating or binding
 deterministic structured-document workload packs, executing subject engines
-inside bounded out-of-process containment, retaining immutable execution
+inside bounded out-of-process containment, recording execution
 evidence, and independently verifying that evidence against the selected input
 pack.
 
@@ -48,7 +48,7 @@ internal/pack/                    pack.json manifest, corpus-pin binding, valida
 internal/generate/                deterministic seeded synthetic workload generators
 internal/containment/             subprocess/container resource limits, RSS & signal capture
 internal/driver/                  line-delimited JSON / batch-manifest driver client
-internal/evidence/                immutable NDJSON recorders and run inventories
+internal/evidence/                NDJSON evidence recorders and run inventories
 internal/oracle/                  independent correctness, containment, and divergence verifier
 internal/runner/                  profile admission, warm/cold trial scheduling, orchestration
 internal/assets/                  embedded application identity

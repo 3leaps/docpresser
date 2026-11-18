@@ -37,7 +37,7 @@ stdout and diagnostics on stderr.
    `docpresser generate` (seeded deterministic synthetic YAML/JSON workload
    packs: `k8s-bundle`, `openapi-graph`, `diabolical-alias-pyramid`,
    `yaml11-migration`), and `docpresser validate --pack <dir>`.
-3. Implement `internal/evidence` immutable NDJSON recorder and `internal/oracle`
+3. Implement `internal/evidence` NDJSON evidence recorder and `internal/oracle`
    offline `docpresser verify --run <dir> --pack <dir>` +
    `docpresser summarize --run <dir> --pack <dir> [--format json|markdown]`.
 4. Author small hand-crafted specimens in `corpus/v0/` covering valid runs and
