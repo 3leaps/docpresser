@@ -1,0 +1,21 @@
+# Public-surface scan configuration (scripts/surface-scan.sh).
+# The built-in public baseline is always loaded. The organization catalog is
+# never committed: it is read from the file named by LIMENSAFE_CATALOG_PATH.
+schema_version: "1.0.0"
+repo:
+  id: 3leaps/docpresser
+  visibility: public_oss
+catalogs:
+  - catalog_id: limensafe-public-baseline-v0
+    source:
+      kind: builtin
+      name: public-baseline
+    optional: false
+  - catalog_id: docpresser-release
+    source:
+      kind: env
+      var: LIMENSAFE_CATALOG_PATH
+    optional: true
+policy:
+  block_threshold: high
+  redaction_safe_output: true
