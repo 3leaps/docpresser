@@ -7,7 +7,8 @@
 # from a green tree. This guard asserts they moved together.
 #
 # Checks, against the version in VERSION:
-# - CHANGELOG.md carries a "## [<version>]" section
+# - CHANGELOG.md uses [Unreleased] and [<version>] exactly once each, as the
+#   plain headings "## [Unreleased]" and "## [<version>] - YYYY-MM-DD"
 # - link definitions follow a restricted grammar that leaves no Markdown
 #   ambiguity: printable ASCII only, no "<" and no fence delimiters anywhere,
 #   every definition in one
@@ -83,14 +84,6 @@ validate_release_surfaces() {
     fi
     local escaped="${version//./\\.}"
 
-    # Match from a here-string, never a pipe. grep -q exits on the first hit
-    # and closes the pipe; under pipefail the producer's SIGPIPE then turns a
-    # match into a false failure once CHANGELOG is large enough.
-    if ! grep -qE "^## \[${escaped}\]( |$)" <<< "${changelog}"; then
-        echo "error: CHANGELOG.md has no section for [${version}]" >&2
-        return 1
-    fi
-
     local start body footer defs count line earlier
     # Character-level rules close whole classes of Markdown ambiguity at once,
     # wherever they appear (column zero, list items, blockquotes, inline):
@@ -117,6 +110,24 @@ validate_release_surfaces() {
     footer="$(LC_ALL=C sed -n "${start},\$p" <<< "${changelog}" | LC_ALL=C sed -e :a -e '/^[ \t]*$/{$d;N;ba' -e '}')"
     if LC_ALL=C grep -q ']:' <<< "${body}"; then
         echo "error: CHANGELOG.md has a link definition outside the footer" >&2
+        return 1
+    fi
+
+    # The required labels are used exactly once each, as plain section
+    # headings, so no inline link, reference override, code span, image,
+    # escape, indentation or deletion can replace or hide the rendered link.
+    # Match from a here-string, never a pipe: grep -q exits on the first hit
+    # and, under pipefail, the producer's SIGPIPE would turn a match into a
+    # false failure once CHANGELOG is large enough.
+    local uses
+    uses="$(LC_ALL=C grep -iE '\[unreleased\]' <<< "${body}" || true)"
+    if [ "${uses}" != "## [Unreleased]" ]; then
+        echo "error: CHANGELOG.md must use [Unreleased] exactly once, as the heading '## [Unreleased]'" >&2
+        return 1
+    fi
+    uses="$(LC_ALL=C grep -E "\[${escaped}\]" <<< "${body}" || true)"
+    if [[ ! "${uses}" =~ ^##\ \[${escaped}\]\ -\ [0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+        echo "error: CHANGELOG.md has no section for [${version}] (it must use [${version}] exactly once, as '## [${version}] - YYYY-MM-DD')" >&2
         return 1
     fi
     # Every footer destination is one of this repository's fixed URL shapes, so

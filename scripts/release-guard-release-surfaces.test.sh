@@ -64,7 +64,9 @@ expect_rejected() {
 expect_accepted "exact release surfaces" "${version}" "${valid_changelog}"
 
 # A first release links its tag page rather than a compare range.
-expect_accepted "first release tag link" "0.1.0" '## [0.1.0] - 2026-11-17
+expect_accepted "first release tag link" "0.1.0" '## [Unreleased]
+
+## [0.1.0] - 2026-11-17
 
 [Unreleased]: https://github.com/3leaps/docpresser/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/3leaps/docpresser/releases/tag/v0.1.0'
@@ -255,6 +257,31 @@ done
 expect_accepted "inline single backticks and a tab-indented line" \
     "${version}" "$(printf '%s\n' "${valid_changelog}" | sed "s/^- A record\\.\$/- A \`record\` with code.\\
 $(printf '\t')- nested/")"
+
+# The required labels are used exactly once, as plain headings, so the
+# rendered link cannot be overridden, neutralized or removed.
+U="must use [Unreleased] exactly once"
+for replacement in '## [Unreleased](https://example.invalid/wrong)' '## [Unreleased][0.1.23]' \
+    '## `[Unreleased]`' '## ![Unreleased]' '## \[Unreleased]' '    ## [Unreleased]' '## [unreleased]'; do
+    expect_rejected "unreleased heading: ${replacement}" "${U}" \
+        "${version}" "$(printf '%s\n' "${valid_changelog}" | r="${replacement}" awk '$0 == "## [Unreleased]" {print ENVIRON["r"]; next} {print}')"
+done
+expect_rejected "unreleased heading deleted" "${U}" \
+    "${version}" "$(mutate "${valid_changelog}" '/^## \[Unreleased\]$/d')"
+expect_rejected "unreleased heading duplicated" "${U}" \
+    "${version}" "$(mutate "${valid_changelog}" 's/^## \[Unreleased\]$/&\
+\
+&/')"
+expect_rejected "unreleased label reused in prose" "${U}" \
+    "${version}" "$(mutate "${valid_changelog}" 's/^- A record\.$/- See [Unreleased] for more./')"
+V="no section for [0.1.23]"
+for replacement in '## [0.1.23](https://example.invalid/wrong) - 2026-07-26' '## [0.1.23][0.1.22] - 2026-07-26' \
+    '## `[0.1.23]` - 2026-07-26' '## \[0.1.23] - 2026-07-26' '## [0.1.23]' '## [0.1.23] - July 2026'; do
+    expect_rejected "version heading: ${replacement}" "${V}" \
+        "${version}" "$(printf '%s\n' "${valid_changelog}" | r="${replacement}" awk '$0 == "## [0.1.23] - 2026-07-26" {print ENVIRON["r"]; next} {print}')"
+done
+expect_rejected "version label reused in prose" "${V}" \
+    "${version}" "$(mutate "${valid_changelog}" 's/^- A record\.$/- Fixed in [0.1.23]./')"
 
 # The earlier-version check compares decimal strings, so components beyond the
 # shell's integer range cannot wrap to a smaller number.
