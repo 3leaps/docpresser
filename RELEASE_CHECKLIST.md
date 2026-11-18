@@ -116,8 +116,10 @@ empty value, so `unset RELEASE_TAG` first.
       `make release-prepare-tag-message`
 - [ ] Create and verify the local signed tag: `make release-tag`
 - [ ] Verify the local tag against the committed pin: `make release-verify-tag`
-- [ ] Publish and verify the tag (ruleset, remote object, GitHub `valid`):
-      `make release-push-tag`
+- [ ] Publish and verify the tag (local signature against the committed pin,
+      remote object, GitHub `valid`): `make release-push-tag`. The push does
+      not re-check the tag ruleset; that is enforced by
+      `make release-preflight`, so rerun it if anything changed since.
 - [ ] Re-verify the published tag from a clean checkout:
       `make release-verify-published-tag` (and
       `make release-verify-remote-tag` to compare local and remote objects)
