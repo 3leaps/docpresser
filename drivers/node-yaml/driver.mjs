@@ -3,39 +3,56 @@
 
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const PROTOCOL_VERSION = "docpresser-driver/v0";
 
-// jsYamlVersion reads the version of the js-yaml package this driver resolves,
-// or "unavailable" when it is not installed (YAML cases then report
-// missing_js_yaml).
-function jsYamlVersion() {
-	try {
-		const require = createRequire(import.meta.url);
-		let dir = path.dirname(require.resolve("js-yaml"));
-		for (;;) {
-			const candidate = path.join(dir, "package.json");
-			if (fs.existsSync(candidate)) {
-				const pkg = JSON.parse(fs.readFileSync(candidate, "utf8"));
-				if (pkg.name === "js-yaml" && typeof pkg.version === "string") {
-					return pkg.version;
-				}
+// engine is the loaded js-yaml ({ api, version }) or the load failure
+// ({ error }). It is loaded once, with the same ESM import every YAML case
+// uses, so the handshake only succeeds for an engine that actually loads.
+let engine = { error: new Error("js-yaml not loaded yet") };
+
+function packageVersion(entryPath) {
+	let dir = path.dirname(entryPath);
+	for (;;) {
+		const candidate = path.join(dir, "package.json");
+		if (fs.existsSync(candidate)) {
+			const pkg = JSON.parse(fs.readFileSync(candidate, "utf8"));
+			if (pkg.name === "js-yaml" && typeof pkg.version === "string") {
+				return pkg.version;
 			}
-			const parent = path.dirname(dir);
-			if (parent === dir) {
-				return "unavailable";
-			}
-			dir = parent;
 		}
-	} catch {
-		return "unavailable";
+		const parent = path.dirname(dir);
+		if (parent === dir) {
+			return "";
+		}
+		dir = parent;
+	}
+}
+
+async function loadEngine() {
+	try {
+		const mod = await import("js-yaml");
+		const api = typeof mod.loadAll === "function" ? mod : mod.default;
+		if (!api || typeof api.loadAll !== "function") {
+			throw new Error("js-yaml does not export loadAll");
+		}
+		const version = packageVersion(
+			fileURLToPath(import.meta.resolve("js-yaml")),
+		);
+		if (!version) {
+			throw new Error("cannot read the js-yaml package version");
+		}
+		return { api, version };
+	} catch (error) {
+		return { error };
 	}
 }
 
 function subjectVersion() {
-	return `js-yaml ${jsYamlVersion()} (node ${process.version})`;
+	const v = engine.version ? engine.version : "unavailable";
+	return `js-yaml ${v} (node ${process.version})`;
 }
 
 function canonicalizeJCSValue(val) {
@@ -106,10 +123,16 @@ function toNotation(val) {
 }
 
 async function main() {
+	engine = await loadEngine();
 	const args = process.argv.slice(2);
 	if (args.includes("--docpresser-handshake")) {
-		if (jsYamlVersion() === "unavailable") {
-			process.stderr.write("node-yaml driver: js-yaml is not installed\n");
+		if (engine.error) {
+			const reason = String(engine.error.message || engine.error).split(
+				"\n",
+			)[0];
+			process.stderr.write(
+				`node-yaml driver: js-yaml cannot be loaded: ${reason}\n`,
+			);
 			process.exit(2);
 		}
 		const resp = {
@@ -170,8 +193,10 @@ async function main() {
 	}
 
 	try {
-		const jsYaml = await import("js-yaml");
-		const docs = jsYaml.loadAll(text);
+		if (engine.error) {
+			throw engine.error;
+		}
+		const docs = engine.api.loadAll(text);
 		const normDocs = (docs.length === 0 ? [null] : docs).map((d) =>
 			toNotation(d),
 		);

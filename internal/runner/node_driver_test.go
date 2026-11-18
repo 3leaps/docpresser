@@ -9,8 +9,9 @@ import (
 	"testing"
 )
 
-// The Node driver must fail its handshake when js-yaml is not installed, and
-// otherwise report the js-yaml version it resolves alongside the Node version.
+// The Node driver's handshake must load js-yaml exactly as its YAML cases do
+// and fail on any load problem; when it succeeds it reports the js-yaml version
+// it loaded alongside the Node version.
 func TestNodeDriverReportsOnlyTheEngineThatRuns(t *testing.T) {
 	node, err := exec.LookPath("node")
 	if err != nil {
@@ -21,22 +22,31 @@ func TestNodeDriverReportsOnlyTheEngineThatRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	install := func(withJSYaml bool) string {
+	// install copies the driver into a fresh directory with the given
+	// node_modules/js-yaml files (none when files is nil).
+	install := func(t *testing.T, files map[string]string) string {
+		t.Helper()
 		dir := t.TempDir()
+		// ESM resolution walks parent directories; an ancestor js-yaml would
+		// make the absence controls meaningless.
+		for d := filepath.Dir(dir); ; d = filepath.Dir(d) {
+			if _, statErr := os.Stat(filepath.Join(d, "node_modules", "js-yaml")); statErr == nil {
+				t.Skipf("an ancestor of the temp dir provides js-yaml (%s)", d)
+			}
+			if filepath.Dir(d) == d {
+				break
+			}
+		}
 		if err := os.WriteFile(filepath.Join(dir, "driver.mjs"), src, 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"type":"module"}`), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if withJSYaml {
+		if files != nil {
 			mod := filepath.Join(dir, "node_modules", "js-yaml")
 			if err := os.MkdirAll(mod, 0o750); err != nil {
 				t.Fatal(err)
-			}
-			files := map[string]string{
-				"package.json": `{"name":"js-yaml","version":"9.9.9-stub","main":"index.js"}`,
-				"index.js":     "module.exports = { loadAll: () => [] };\n",
 			}
 			for name, body := range files {
 				if err := os.WriteFile(filepath.Join(mod, name), []byte(body), 0o600); err != nil {
@@ -47,32 +57,60 @@ func TestNodeDriverReportsOnlyTheEngineThatRuns(t *testing.T) {
 		return filepath.Join(dir, "driver.mjs")
 	}
 
-	run := func(driver string) ([]byte, string, error) {
+	// run executes a handshake with global module folders disabled: HOME is a
+	// fresh directory and NODE_PATH is unset.
+	run := func(t *testing.T, driver string) ([]byte, string, error) {
+		t.Helper()
 		cmd := exec.Command(node, driver, "--docpresser-handshake")
-		cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+		cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + t.TempDir()}
 		var stderr strings.Builder
 		cmd.Stderr = &stderr
 		out, runErr := cmd.Output()
 		return out, stderr.String(), runErr
 	}
 
-	out, stderr, err := run(install(false))
-	if err == nil {
-		t.Fatalf("handshake without js-yaml succeeded: %s", out)
+	pkg := `{"name":"js-yaml","version":"9.9.9-stub","main":"index.js"}`
+	failing := map[string]map[string]string{
+		"not installed": nil,
+		"init throws": {
+			"package.json": pkg,
+			"index.js":     "throw new Error('stub init failure');\n",
+		},
+		"missing transitive dependency": {
+			"package.json": pkg,
+			"index.js":     "require('js-yaml-missing-dependency');\nmodule.exports = { loadAll: () => [] };\n",
+		},
+		"no loadAll export": {
+			"package.json": pkg,
+			"index.js":     "module.exports = { load: () => null };\n",
+		},
 	}
-	if !strings.Contains(stderr, "js-yaml is not installed") {
-		t.Fatalf("handshake without js-yaml failed for another reason: %s", stderr)
+	for name, files := range failing {
+		t.Run(name, func(t *testing.T) {
+			out, stderr, err := run(t, install(t, files))
+			if err == nil {
+				t.Fatalf("handshake succeeded with a js-yaml that cannot run: %s", out)
+			}
+			if !strings.Contains(stderr, "js-yaml cannot be loaded") {
+				t.Fatalf("handshake failed for another reason: %s", stderr)
+			}
+		})
 	}
 
-	out, stderr, err = run(install(true))
-	if err != nil {
-		t.Fatalf("handshake with js-yaml failed: %v\n%s", err, stderr)
-	}
-	var h map[string]any
-	if err := json.Unmarshal(out, &h); err != nil {
-		t.Fatalf("handshake is not JSON: %v\n%s", err, out)
-	}
-	if got, _ := h["subject_version"].(string); !strings.HasPrefix(got, "js-yaml 9.9.9-stub (node ") {
-		t.Fatalf("subject_version = %q, want the resolved js-yaml version", got)
-	}
+	t.Run("loads", func(t *testing.T) {
+		out, stderr, err := run(t, install(t, map[string]string{
+			"package.json": pkg,
+			"index.js":     "module.exports = { loadAll: () => [] };\n",
+		}))
+		if err != nil {
+			t.Fatalf("handshake with a working js-yaml failed: %v\n%s", err, stderr)
+		}
+		var h map[string]any
+		if err := json.Unmarshal(out, &h); err != nil {
+			t.Fatalf("handshake is not JSON: %v\n%s", err, out)
+		}
+		if got, _ := h["subject_version"].(string); !strings.HasPrefix(got, "js-yaml 9.9.9-stub (node ") {
+			t.Fatalf("subject_version = %q, want the loaded js-yaml version", got)
+		}
+	})
 }
