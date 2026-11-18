@@ -57,6 +57,9 @@ EMBEDDED_IDENTITY_DST := internal/assets/appidentity/app.yaml
 GONEAT_VERSION ?= v0.6.8
 SFETCH_BIN := $(shell command -v sfetch 2>/dev/null)
 GONEAT_BIN = $(firstword $(wildcard $(BINDIR)/goneat$(BINARY_EXT)) $(shell command -v goneat 2>/dev/null))
+# license-audit and prepush read the discovered goneat only from the environment
+# as a quoted shell variable, never as recipe text.
+export DOCPRESSER_GONEAT_DISCOVERED := $(GONEAT_BIN)
 
 # Default target
 all: fmt test
@@ -117,7 +120,7 @@ verify-dependencies:  ## Alias for dependencies (compatibility)
 	@$(MAKE) dependencies
 
 license-audit:  ## Audit dependency licenses (goneat — enforces .goneat/dependencies.yaml)
-	@goneat="$${DOCPRESSER_GONEAT_BIN:-$(GONEAT_BIN)}"; \
+	@goneat="$${DOCPRESSER_GONEAT_BIN:-$${DOCPRESSER_GONEAT_DISCOVERED:-}}"; \
 		if [ -z "$$goneat" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi; \
 		echo "🧪 Auditing dependency licenses (goneat dependencies)..."; \
 		"$$goneat" dependencies --licenses --fail-on high
@@ -373,7 +376,7 @@ precommit:  ## Run pre-commit hooks (format/lint/security + tests)
 	@echo "✅ Pre-commit checks passed"
 
 prepush: license-audit ## Run pre-push hooks (goneat assess + PR-scope public-surface scan when the catalog is set)
-	@goneat="$${DOCPRESSER_GONEAT_BIN:-$(GONEAT_BIN)}"; \
+	@goneat="$${DOCPRESSER_GONEAT_BIN:-$${DOCPRESSER_GONEAT_DISCOVERED:-}}"; \
 		if [ -z "$$goneat" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi; \
 		echo "Running pre-push validation..." && GOTOOLCHAIN=auto "$$goneat" assess --categories format,lint,security,dependencies,dates,tools,maturity,repo-status --fail-on high --package-mode
 	@DOCPRESSER_SURFACE_SCOPE=pr ./scripts/surface-scan.sh
