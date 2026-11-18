@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/3leaps/docpresser/internal/buildinfo"
 	"github.com/fulmenhq/gofulmen/appidentity"
 	"github.com/fulmenhq/gofulmen/crucible"
 	"github.com/spf13/cobra"
@@ -18,6 +19,7 @@ var (
 // SetVersionInfo sets the version information (called from main).
 func SetVersionInfo(v, c, b string) {
 	version = v
+	buildinfo.SetVersion(v)
 	commit = c
 	buildDate = b
 }

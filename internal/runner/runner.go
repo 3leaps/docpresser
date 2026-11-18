@@ -67,7 +67,14 @@ func Run(ctx context.Context, opts Options) (*model.RunManifest, error) {
 
 	metas := make([]model.SubjectMetadata, 0, len(clients))
 	for _, c := range clients {
-		metas = append(metas, c.Metadata())
+		if err := c.Handshake(ctx); err != nil {
+			return nil, err
+		}
+		meta, err := c.Metadata()
+		if err != nil {
+			return nil, err
+		}
+		metas = append(metas, meta)
 	}
 
 	profile := opts.Profile

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/3leaps/docpresser/internal/buildinfo"
 	"github.com/3leaps/docpresser/internal/model"
 	v0 "github.com/3leaps/docpresser/schemas/docpresser/v0"
 )
@@ -107,6 +108,7 @@ func (r *Recorder) Complete(state string) (*model.RunManifest, error) {
 
 	manifest := model.RunManifest{
 		Version:            model.Version,
+		DocpresserVersion:  buildinfo.Version(),
 		State:              state,
 		RunID:              r.runID,
 		Profile:            r.profile,

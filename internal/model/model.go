@@ -105,6 +105,7 @@ type Observation struct {
 // RunManifest represents run-manifest.json in an evidence bundle directory.
 type RunManifest struct {
 	Version            string            `json:"version"`
+	DocpresserVersion  string            `json:"docpresser_version"`
 	State              string            `json:"state"`
 	RunID              string            `json:"run_id"`
 	Profile            string            `json:"profile"`
@@ -129,10 +130,14 @@ type HostMetadata struct {
 
 // SubjectMetadata describes a subject driver invoked during a run.
 type SubjectMetadata struct {
-	Name         string `json:"name"`
-	Role         string `json:"role"`
-	Version      string `json:"version"`
-	DriverSHA256 string `json:"driver_sha256"`
+	Name           string   `json:"name"`
+	Role           string   `json:"role"`
+	SubjectVersion string   `json:"subject_version"`
+	Language       string   `json:"language"`
+	Engine         string   `json:"engine"`
+	Formats        []string `json:"formats"`
+	Operations     []string `json:"operations"`
+	DriverSHA256   string   `json:"driver_sha256"`
 }
 
 // VerificationReport represents the structured output of the offline oracle.
