@@ -53,9 +53,10 @@ generator, or runner packages.
 ## Slice 3 — Out-of-process containment supervisor and NDJSON driver protocol
 
 1. Implement `internal/containment` and `internal/driver` for single-case
-   contained execution and batch throughput trials (wall-clock timeout, child
-   RSS/memory ceiling, isolated empty/read-only working dir, child `rusage` /
-   wait-status / signal capture).
+   contained execution and batch throughput trials (wall-clock timeout, empty
+   temporary working dir, child `rusage` / wait-status / signal capture). An
+   enforced RSS/memory ceiling and a read-only working dir are target design,
+   not yet implemented.
 2. Build a synthetic Go test-fixture driver (`internal/driver/testdata/faultdriver`)
    never reported as a real subject, capable of deterministic behaviors on
    command: clean pass, structured budget refusal, `SIGABRT` / panic crash,

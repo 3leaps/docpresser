@@ -1,7 +1,7 @@
 # Docpresser
 
-Qualification and synthetic-workload harness for structured documents (YAML,
-JSON/I-JSON/JCS, XML, XHTML, SVG; OOXML and PDF in later profiles).
+Qualification and synthetic-workload harness for structured documents. YAML and
+JSON (I-JSON/JCS) today; XML, XHTML, SVG, OOXML and PDF planned.
 
 **Status: experimental (v0.1.0).** Version 0.1.0 implements the first wave:
 deterministic pack generation, `structcorpus` binding and pack validation,

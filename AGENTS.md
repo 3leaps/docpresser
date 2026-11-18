@@ -50,8 +50,10 @@ reviewer by switching role labels. Relied-upon reviews follow the canonical
   incumbent disagreements are classified as `migration_divergence` or subject
   findings, never as format truth.
 - **Subject integrity and isolation.** Every subject driver runs out-of-process
-  under bounded CPU, wall-clock, memory/RSS, and filesystem/network containment
-  with the recorder owned by the parent coordinator. Do not link C parser
+  with the recorder owned by the parent coordinator. Today that means a
+  wall-clock timeout, a temporary working directory, a scrubbed environment,
+  and capped output; enforced memory/RSS ceilings and filesystem/network
+  isolation are target design. Do not describe them as implemented. Do not link C parser
   libraries (`libyaml`, `libxml2`, `expat`) into the `docpresser` coordinator
   binary. An adapter named after a subject drives that subject's real entry
   points at a recorded version/digest; if a subject binary or runtime is
