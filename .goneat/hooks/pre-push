@@ -78,7 +78,8 @@ if [ -f "$REPO_ROOT/scripts/verify-crucible-clean.sh" ]; then
     fi
 fi
 
-# Report only. --mode check does not rewrite files.
-"$GONEAT_BIN" assess --mode check --hook pre-push --hook-manifest "$REPO_ROOT/.goneat/hooks.yaml" --staged-only --package-mode
+# Delegate to `make prepush` so a plain git push runs the same gate as the
+# make target: goneat assess plus the PR-scope public-surface scan.
+make -C "$REPO_ROOT" --no-print-directory prepush
 
 echo "✅ Pre-push validation passed!"

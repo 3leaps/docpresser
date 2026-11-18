@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Drive release-preflight.sh through every gate to its terminal `make pr-final`
+# Drive release-preflight.sh through every gate to its terminal `make check`
 # call, with that final gate passing and failing. go, goneat and make are test
 # doubles; the repository, origin and clone-outside-$HOME steps are real.
 set -euo pipefail
@@ -53,7 +53,7 @@ git init -q --bare -b main "$scratch/origin.git"
 git -C "$repo" remote add origin "$scratch/origin.git"
 git -C "$repo" push -q origin main
 
-# Test doubles: record calls; make honors FIXTURE_PR_FINAL.
+# Test doubles: record calls; make honors FIXTURE_CHECK.
 cat > "$scratch/bin/go" << 'SH'
 #!/usr/bin/env bash
 printf 'go %s\n' "$*" >> "$FIXTURE_LOG"
@@ -65,8 +65,8 @@ SH
 cat > "$scratch/bin/make" << 'SH'
 #!/usr/bin/env bash
 printf 'make %s\n' "$*" >> "$FIXTURE_LOG"
-[[ "$*" == *pr-final* ]] || exit 3
-[[ "${FIXTURE_PR_FINAL:-pass}" == pass ]]
+[[ "$*" == "--no-print-directory check" ]] || exit 3
+[[ "${FIXTURE_CHECK:-pass}" == pass ]]
 SH
 cat > "$scratch/bin/gh" << 'SH'
 #!/usr/bin/env bash
@@ -95,42 +95,42 @@ run() {
     (cd "$repo" && "$@" ./scripts/release-preflight.sh) > "$scratch/out" 2>&1
 }
 
-# Final gate passes: preflight completes and pr-final was the terminal call.
-run env FIXTURE_PR_FINAL=pass || {
+# Final gate passes: preflight completes and check was the terminal call.
+run env FIXTURE_CHECK=pass || {
     cat "$scratch/out" >&2
     echo 'error: preflight failed with a passing final gate' >&2
     exit 1
 }
-grep -q '^\[ok\] pr-final gate passed' "$scratch/out"
+grep -q '^\[ok\] check gate passed' "$scratch/out"
 grep -q '^\[ok\] preflight passed for v1.2.3' "$scratch/out"
-[[ "$(tail -1 "$FIXTURE_LOG")" == 'make --no-print-directory pr-final' ]]
+[[ "$(tail -1 "$FIXTURE_LOG")" == 'make --no-print-directory check' ]]
 grep -q '^go test ./...$' "$FIXTURE_LOG"
 
 # Final gate fails: preflight fails, names the gate, and never claims success.
-if run env FIXTURE_PR_FINAL=fail; then
+if run env FIXTURE_CHECK=fail; then
     echo 'error: preflight passed with a failing final gate' >&2
     exit 1
 fi
-grep -q 'make pr-final failed' "$scratch/out"
+grep -q 'make check failed' "$scratch/out"
 if grep -q 'preflight passed' "$scratch/out"; then
     echo 'error: preflight claimed success after a failed final gate' >&2
     exit 1
 fi
 
 # Unset or relative DOCPRESSER_DECERNOR_BIN fails closed before later gates.
-if run env -u DOCPRESSER_DECERNOR_BIN FIXTURE_PR_FINAL=pass; then
+if run env -u DOCPRESSER_DECERNOR_BIN FIXTURE_CHECK=pass; then
     echo 'error: preflight passed without DOCPRESSER_DECERNOR_BIN' >&2
     exit 1
 fi
 grep -q 'committed release anchors check failed' "$scratch/out"
 [[ "$(grep -c '^make' "$FIXTURE_LOG")" == 0 ]] || {
-    echo 'error: pr-final ran after committed anchors failure' >&2
+    echo 'error: check ran after committed anchors failure' >&2
     exit 1
 }
 
 # A dirty tree stops before any later gate runs.
 printf 'x\n' > "$repo/untracked"
-if run env FIXTURE_PR_FINAL=pass; then
+if run env FIXTURE_CHECK=pass; then
     echo 'error: preflight passed with a dirty tree' >&2
     exit 1
 fi
@@ -144,7 +144,7 @@ changelog_case() { # reason changelog-content
     printf '%s\n' "$2" > "$repo/CHANGELOG.md"
     git -C "$repo" -c user.name=fixture -c user.email=fixture@example.invalid commit -qam "changelog: $reason"
     git -C "$repo" push -q origin main
-    if run env FIXTURE_PR_FINAL=pass; then
+    if run env FIXTURE_CHECK=pass; then
         echo "error: preflight passed with changelog: $reason" >&2
         exit 1
     fi
@@ -167,7 +167,7 @@ changelog_case 'release surfaces do not match VERSION' "$(printf '%s\n' "$good" 
 good_changelog > "$repo/CHANGELOG.md"
 git -C "$repo" -c user.name=fixture -c user.email=fixture@example.invalid commit -qam 'changelog: restore'
 git -C "$repo" push -q origin main
-run env FIXTURE_PR_FINAL=pass || {
+run env FIXTURE_CHECK=pass || {
     cat "$scratch/out" >&2
     echo 'error: preflight failed with a valid changelog' >&2
     exit 1

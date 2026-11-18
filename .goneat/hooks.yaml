@@ -6,10 +6,12 @@ hooks:
       priority: 10
       timeout: "90s"
   pre-push:
-    - command: "assess"
-      args: ["--categories", "format,lint,security,dependencies,dates,tools,maturity,repo-status", "--fail-on", "high", "--package-mode"]
+    # The checked-in .goneat/hooks/pre-push delegates to `make prepush`
+    # (goneat assess plus the public-surface scan); keep this entry in step.
+    - command: "make"
+      args: ["prepush"]
       priority: 10
-      timeout: "2m"
+      timeout: "10m"
 optimization:
   cache_results: true
   content_source: working

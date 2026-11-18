@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- `make check` is the non-mutating CI gate; `make pr-final` adds a required public-surface scan of the tree, commits, pull-request text and branch name; `make prepush` and the pre-push hook run that scan when a catalog is configured.
+- CI scans pull requests, including forks, with the scanner's built-in baseline.
+- Containment scratch directories are named `docpresser-run-*`.
+
 ## [0.1.0] - 2026-11-17
 
 - Add the Docpresser CLI foundation, embedded application identity, and runtime diagnostics.

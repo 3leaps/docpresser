@@ -6,7 +6,7 @@
 .PHONY: release-guard-tag-name release-guard-tag-version release-guard-signing-tag release-guard-release-surfaces sync-changelog-links
 .PHONY: release-prepare-tag-message release-tag release-push-tag release-verify-tag release-verify-published-tag release-verify-remote-tag
 .PHONY: release-export-pin release-validate-pin release-insert-anchors release-github-preflight release-preflight
-.PHONY: release-tooling-test release-tag-tests release-anchors-check surface-scan surface-scan-release
+.PHONY: release-tooling-test release-tag-tests release-anchors-check surface-scan surface-scan-ci surface-scan-release
 
 # Binary and version information
 BINARY_NAME := docpresser
@@ -62,7 +62,7 @@ GONEAT_BIN = $(firstword $(wildcard $(BINDIR)/goneat$(BINARY_EXT)) $(shell comma
 all: fmt test
 
 help:  ## Show this help message
-	@printf "%b" '$(BINARY_NAME) - Available Make Targets\n\nRequired targets (Fulmen Makefile Standard):\n  help                     - Show this help message\n  bootstrap                - Install external tools (goneat) and dependencies\n  bootstrap-force          - Force reinstall external tools\n  tools                    - Verify external tools are available\n  sync                     - Compatibility target (embedded assets are explicitly pinned)\n  sync-embedded-identity   - Sync embedded identity mirror (.fulmen → internal/assets)\n  verify-embedded-identity - Verify embedded identity mirror is in sync\n  dependencies             - Generate SBOM for supply-chain security\n  license-audit            - Audit dependency licenses\n  license-check            - Verify verbatim LICENSE-MIT, LICENSE-APACHE, and NOTICE\n  content-check            - Verify committed files contain no local paths, keys, or tokens\n  lint                     - Run lint/format/style checks\n  test                     - Run all tests\n  build                    - Build distributable artifacts\n  install                  - Install binary to BINDIR (default: ~/.local/bin)\n  build-all                - Build multi-platform binaries\n  test-standalone-binary   - Verify built binary works outside repo\n  clean                    - Remove build artifacts and caches\n  fmt                      - Format code\n  fmt-check                - Check formatting without mutating (CI gate)\n  version                  - Print current version\n  version-set              - Set version to specific value (VERSION=x.y.z)\n  version-bump-major       - Bump major version\n  version-bump-minor       - Bump minor version\n  version-bump-patch       - Bump patch version\n  release-check            - Run release checklist validation\n  release-prepare          - Prepare for release\n  release-build            - Build release artifacts\n  release-preflight        - Pre-tag release gate (see RELEASE_CHECKLIST.md)\n  release-tooling-test     - Run release tooling test suites (throwaway keys)\n  release-anchors-check    - Check committed public pin against fingerprint anchors\n  release-guard-release-surfaces - Verify CHANGELOG.md matches VERSION\n  sync-changelog-links     - Sync CHANGELOG compare-link footers to VERSION\n  check                    - Complete non-mutating validation gate\n  check-all                - Run all quality checks (fmt, lint, test)\n  precommit                - Run pre-commit hooks\n  prepush                  - Run pre-push hooks\n  pr-final                 - Non-mutating PR gate\n\nIdentity and source checks:\n  doctor                   - Run foundation checks\n  validate-app-identity    - Validate app identity configuration\n  cdrl-verify              - Fast residue detector (fails on template strings)\n'
+	@printf "%b" '$(BINARY_NAME) - Available Make Targets\n\nRequired targets (Fulmen Makefile Standard):\n  help                     - Show this help message\n  bootstrap                - Install external tools (goneat) and dependencies\n  bootstrap-force          - Force reinstall external tools\n  tools                    - Verify external tools are available\n  sync                     - Compatibility target (embedded assets are explicitly pinned)\n  sync-embedded-identity   - Sync embedded identity mirror (.fulmen → internal/assets)\n  verify-embedded-identity - Verify embedded identity mirror is in sync\n  dependencies             - Generate SBOM for supply-chain security\n  license-audit            - Audit dependency licenses\n  license-check            - Verify verbatim LICENSE-MIT, LICENSE-APACHE, and NOTICE\n  content-check            - Verify committed files contain no local paths, keys, or tokens\n  lint                     - Run lint/format/style checks\n  test                     - Run all tests\n  build                    - Build distributable artifacts\n  install                  - Install binary to BINDIR (default: ~/.local/bin)\n  build-all                - Build multi-platform binaries\n  test-standalone-binary   - Verify built binary works outside repo\n  clean                    - Remove build artifacts and caches\n  fmt                      - Format code\n  fmt-check                - Check formatting without mutating (CI gate)\n  version                  - Print current version\n  version-set              - Set version to specific value (VERSION=x.y.z)\n  version-bump-major       - Bump major version\n  version-bump-minor       - Bump minor version\n  version-bump-patch       - Bump patch version\n  release-check            - Run release checklist validation\n  release-prepare          - Prepare for release\n  release-build            - Build release artifacts\n  release-preflight        - Pre-tag release gate (see RELEASE_CHECKLIST.md)\n  release-tooling-test     - Run release tooling test suites (throwaway keys)\n  release-anchors-check    - Check committed public pin against fingerprint anchors\n  release-guard-release-surfaces - Verify CHANGELOG.md matches VERSION\n  sync-changelog-links     - Sync CHANGELOG compare-link footers to VERSION\n  check                    - Complete non-mutating validation gate (CI)\n  check-all                - Run all quality checks (fmt, lint, test)\n  precommit                - Run pre-commit hooks\n  prepush                  - Run pre-push hooks (incl. public-surface scan)\n  pr-final                 - Maintainer PR gate (check + required surface scan)\n  surface-scan-ci          - Public-surface scan, built-in baseline only (CI)\n\nIdentity and source checks:\n  doctor                   - Run foundation checks\n  validate-app-identity    - Validate app identity configuration\n  cdrl-verify              - Fast residue detector (fails on template strings)\n'
 
 bootstrap:  ## Install external tools via sfetch + goneat
 	@echo "Installing external tools..."
@@ -262,8 +262,11 @@ release-tooling-test:  ## Run all release and surface-hygiene tooling test suite
 release-tag-tests: release-tooling-test  ## Signed-tag tooling tests (throwaway keys only; needs gpg, git, python3, jq, make, decernor)
 	@echo "✅ Signed-tag tooling tests passed"
 
-surface-scan: content-check  ## Run two-tier public-surface hygiene checks
-	@./scripts/surface-scan.sh
+surface-scan: content-check  ## Run two-tier public-surface hygiene checks (PR scope; skips without the catalog)
+	@DOCPRESSER_SURFACE_SCOPE=pr ./scripts/surface-scan.sh
+
+surface-scan-ci:  ## Run the PR-scope public-surface scan with the built-in baseline only (CI; no catalog)
+	@DOCPRESSER_SURFACE_BASELINE_ONLY=1 DOCPRESSER_SURFACE_SCOPE=pr ./scripts/surface-scan.sh
 
 surface-scan-release: content-check  ## Run release-mode public-surface hygiene checks (requires external limensafe catalog)
 	@DOCPRESSER_SURFACE_SCAN_REQUIRED=1 DOCPRESSER_SURFACE_SCOPE=release ./scripts/surface-scan.sh
@@ -355,7 +358,6 @@ verify-toolchain:  ## Require the pinned Go and goneat versions
 	@actual_goneat="$$("$(GONEAT_BIN)" --version)" || exit 1; \
 		test "$$actual_goneat" = "goneat $(GONEAT_VERSION)" || { echo "Expected goneat $(GONEAT_VERSION); got $$actual_goneat" >&2; exit 1; }
 
-check: pr-final  ## Complete non-mutating validation gate
 
 check-all: fmt lint test  ## Run all quality checks (mutates formatting)
 	@echo "✅ All quality checks passed"
@@ -369,12 +371,18 @@ precommit:  ## Run pre-commit hooks (format/lint/security + tests)
 	@$(MAKE) test
 	@echo "✅ Pre-commit checks passed"
 
-prepush: license-audit ## Run pre-push hooks (reserved for the tag/pushtag path)
+prepush: license-audit ## Run pre-push hooks (goneat assess + PR-scope public-surface scan when the catalog is set)
 	@if [ -z "$(GONEAT_BIN)" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi
-	@echo "Running pre-push validation..." && GOTOOLCHAIN=auto $(GONEAT_BIN) assess --categories format,lint,security,dependencies,dates,tools,maturity,repo-status --fail-on high --package-mode && echo "✅ Pre-push checks passed"
+	@echo "Running pre-push validation..." && GOTOOLCHAIN=auto $(GONEAT_BIN) assess --categories format,lint,security,dependencies,dates,tools,maturity,repo-status --fail-on high --package-mode
+	@DOCPRESSER_SURFACE_SCOPE=pr ./scripts/surface-scan.sh
+	@echo "✅ Pre-push checks passed"
 
-pr-final:  ## Non-mutating PR gate (identity + fmt-check + lint + test + license + build-all)
-	@echo "🔒 Running pr-final gate (non-mutating)..."
+pr-final: check  ## Maintainer PR gate: check + required PR-scope public-surface scan (needs LIMENSAFE_CATALOG_PATH and DOCPRESSER_SURFACE_PR_TEXT)
+	@DOCPRESSER_SURFACE_SCOPE=pr DOCPRESSER_SURFACE_SCAN_REQUIRED=1 ./scripts/surface-scan.sh
+	@echo "✅ pr-final gate passed"
+
+check:  ## Complete non-mutating validation gate (CI)
+	@echo "🔒 Running check gate (non-mutating)..."
 	@$(MAKE) verify-toolchain
 	@$(MAKE) validate-app-identity
 	@$(MAKE) cdrl-verify
@@ -390,7 +398,7 @@ pr-final:  ## Non-mutating PR gate (identity + fmt-check + lint + test + license
 	@$(MAKE) license-audit
 	@$(MAKE) build-all
 	@$(MAKE) test-standalone-binary
-	@echo "✅ pr-final gate passed"
+	@echo "✅ check gate passed"
 
 clean:  ## Clean build artifacts and reports
 	@echo "Cleaning artifacts..."

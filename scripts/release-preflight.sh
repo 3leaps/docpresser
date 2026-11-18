@@ -72,6 +72,6 @@ if ! (cd "$outside/src" && go test ./... > "$outside/test.log" 2>&1); then
 fi
 ok 'tests pass from a clone outside the home directory'
 
-make --no-print-directory pr-final > /dev/null || die 'make pr-final failed'
-ok 'pr-final gate passed'
+make --no-print-directory check > /dev/null || die 'make check failed'
+ok 'check gate passed'
 echo "[ok] preflight passed for $tag at $(git rev-parse --short HEAD); ready to tag"
