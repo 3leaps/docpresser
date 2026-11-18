@@ -307,3 +307,39 @@ func TestLoadConfig_ReportsLegacyYAMLUserFile(t *testing.T) {
 		t.Fatalf("JSON config beside a legacy file: cfg=%#v err=%v", cfg, err)
 	}
 }
+
+func TestParseFileLayerRejectsMalformedUnicode(t *testing.T) {
+	accepted := map[string]string{
+		"{\"run_root\": \"/runs/\\ud83d\\ude00\"}": "/runs/\U0001f600",
+		"{\"run_root\": \"/r\\u00e9ns\"}":          "/r\u00e9ns",
+		"{\"run_root\": \"/runs/\\ufffd\"}":        "/runs/\ufffd",
+		`{"run_root": "/réns"}`:                    "/réns",
+		`{"run_root": "/runs/�"}`:                  "/runs/�",
+		`{"run_root": "/runs/😀"}`:                  "/runs/\U0001f600",
+		`{"run_root": "/runs/\\ud800"}`:            `/runs/\ud800`,
+		"{\"run_root\": \"/runs/é\"}":              "/runs/é",
+	}
+	for input, want := range accepted {
+		got, err := parseFileLayer([]byte(input))
+		if err != nil {
+			t.Fatalf("parseFileLayer(%q) rejected: %v", input, err)
+		}
+		if got["run_root"] != want {
+			t.Fatalf("parseFileLayer(%q) run_root = %q, want %q", input, got["run_root"], want)
+		}
+	}
+	for _, input := range []string{
+		"{\"run_root\": \"/runs/\xff\"}",
+		"{\"run_root\": \"/runs/\xc3\"}",
+		`{"run_root": "/runs/\ud800"}`,
+		`{"run_root": "/runs/\udc00"}`,
+		`{"run_root": "/runs/\ud800x"}`,
+		`{"run_root": "/runs/\ud800A"}`,
+		`{"run_root": "/runs/\ud800\ud800"}`,
+		`{"run_root": "/runs/\ude00\ud83d"}`,
+	} {
+		if layer, err := parseFileLayer([]byte(input)); err == nil {
+			t.Fatalf("parseFileLayer(%q) accepted malformed Unicode: %v", input, layer)
+		}
+	}
+}
