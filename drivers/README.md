@@ -1,6 +1,6 @@
 # Docpresser Subject Drivers (`docpresser-driver/v0`)
 
-Each directory under `drivers/` is an **independent, standalone subject driver** (with its own `go.mod`, `Cargo.toml`, `package.json`, or runtime script). The `docpresser` coordinator binary (`CGO_ENABLED=0`) never links target or baseline parser libraries in-process; instead, `docpresser run` invokes subject drivers out-of-process under `internal/containment`.
+Each directory under `drivers/` is an **independent, standalone subject driver** (with its own `go.mod`, `Cargo.toml`, `package.json`, or runtime script). The `docpresser` coordinator binary (`CGO_ENABLED=0`) never parses a test document itself and never runs a target or baseline parser in-process; `docpresser run` invokes subject drivers out-of-process under `internal/containment`. (Foundation libraries it builds on link `gopkg.in/yaml.v3` for their own metadata; it is never used on test documents.)
 
 ## Driver Inventory (Wave 1)
 

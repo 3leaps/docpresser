@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Breaking (user configuration): the optional user configuration file is now JSON, `~/.config/3leaps/docpresser.json`, holding one object whose only key is `run_root` (a string). An existing `docpresser.yaml` is reported as an error instead of being read, and `DOCPRESSER_CONFIG_PATH` files must be JSON. docpresser no longer uses a YAML parser of its own.
 - Breaking (run-manifest.json): `docpresser run` now calls each driver with `--docpresser-handshake` before any case and records what it reports. Each `subjects[]` entry carries `driver_subject` (the subject name the driver reports), `subject_version`, `language`, `engine`, `formats`, and `operations`; the `version` field is removed. The manifest also records `docpresser_version`, the docpresser build that wrote it. A failed or invalid handshake stops the run before any evidence is written. In manifests written by 0.1.0, `subjects[].version` is a fixed placeholder and does not identify the subject's version.
 - A case response whose `subject_version` differs from the handshake is recorded as `protocol_error` with `subject_version_mismatch`.
 - The Python driver runs only the engine requested and fails when it is unavailable: `pyyaml-safe` requires PyYAML, `pyyaml-csafe` requires PyYAML built with libyaml, and the built-in YAML 1.1 parser is selected explicitly with `--engine builtin-yaml11`. The undocumented `yamlprims` engine is removed.
