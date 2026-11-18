@@ -12,6 +12,10 @@ extraction, OOXML, and PDF profiles are planned for later waves. Releases are
 source-only signed tags; no binaries are published. Commands, schemas, and
 evidence formats may change before 1.0.
 
+Run manifests written by 0.1.0 record a fixed placeholder in
+`subjects[].version`; it does not identify the subject's version. Later
+versions record the version each driver reports in its handshake.
+
 Docpresser generates or binds deterministic workload packs (including pinned
 [`3leaps/structcorpus`](https://github.com/3leaps/structcorpus) releases), drives
 document readers, emitters, canonicalizers, and extractors inside bounded
