@@ -12,7 +12,7 @@ import (
 )
 
 func TestLoadConfig_DefaultsAndEnvOverrides(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	identity := &appidentity.Identity{BinaryName: "docpresser", Vendor: "acme", EnvPrefix: "TEST_", ConfigName: "tool"}
 	logger, err := logging.NewCLI(identity.BinaryName)
 	if err != nil {
@@ -33,7 +33,7 @@ func TestLoadConfig_DefaultsAndEnvOverrides(t *testing.T) {
 }
 
 func TestLoadConfig_FileAndEnvPriority(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	identity := &appidentity.Identity{BinaryName: "docpresser", Vendor: "vendorx", EnvPrefix: "MYTOOL_", ConfigName: "mytool"}
 	logger, err := logging.NewCLI(identity.BinaryName)
 	if err != nil {
@@ -64,7 +64,7 @@ func TestLoadConfig_FileAndEnvPriority(t *testing.T) {
 }
 
 func TestLoadConfigDefaultsHaveDefaultSource(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	identity := &appidentity.Identity{BinaryName: "docpresser", Vendor: "acme", EnvPrefix: "TEST_", ConfigName: "tool"}
 	logger, err := logging.NewCLI(identity.BinaryName)
 	if err != nil {
@@ -80,7 +80,7 @@ func TestLoadConfigDefaultsHaveDefaultSource(t *testing.T) {
 }
 
 func TestLoadConfig_ExplicitConfigPath(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	identity := &appidentity.Identity{BinaryName: "docpresser", Vendor: "3leaps", EnvPrefix: "DOCPRESSER_", ConfigName: "docpresser"}
 	logger, err := logging.NewCLI(identity.BinaryName)
 	if err != nil {
@@ -106,7 +106,7 @@ func TestLoadConfig_ExplicitConfigPath(t *testing.T) {
 
 func TestUserConfigPathRejectsEscape(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	identity := &appidentity.Identity{Vendor: "..", ConfigName: "secret"}
 	if _, err := userConfigPath(identity); err == nil {
 		t.Fatal("expected config path outside ~/.config to be rejected")
@@ -118,7 +118,7 @@ func TestUserConfigPathRejectsEscape(t *testing.T) {
 
 func TestReadUserConfigRejectsSymlinkEscape(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	configDir := filepath.Join(home, ".config")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		t.Fatalf("make config directory: %v", err)
@@ -152,7 +152,7 @@ func TestReadExplicitConfigRejectsSymlinkEscape(t *testing.T) {
 }
 
 func TestLoadConfigRejectsUnknownFileFields(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	identity := &appidentity.Identity{BinaryName: "docpresser", Vendor: "3leaps", EnvPrefix: "DOCPRESSER_", ConfigName: "docpresser"}
 	logger, err := logging.NewCLI(identity.BinaryName)
 	if err != nil {
@@ -169,7 +169,7 @@ func TestLoadConfigRejectsUnknownFileFields(t *testing.T) {
 }
 
 func TestLoadConfigRejectsOversizedFileWithoutPathLeak(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	identity := &appidentity.Identity{BinaryName: "docpresser", Vendor: "3leaps", EnvPrefix: "DOCPRESSER_", ConfigName: "docpresser"}
 	logger, err := logging.NewCLI(identity.BinaryName)
 	if err != nil {
@@ -248,7 +248,7 @@ func TestParseFileLayerAcceptsOnlyOneStringRunRoot(t *testing.T) {
 
 func TestLoadConfig_UserFileIsJSON(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	identity := &appidentity.Identity{BinaryName: "docpresser", Vendor: "3leaps", EnvPrefix: "DOCPRESSER_", ConfigName: "docpresser"}
 	logger, err := logging.NewCLI(identity.BinaryName)
 	if err != nil {
@@ -278,7 +278,7 @@ func TestLoadConfig_UserFileIsJSON(t *testing.T) {
 
 func TestLoadConfig_ReportsLegacyYAMLUserFile(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	identity := &appidentity.Identity{BinaryName: "docpresser", Vendor: "3leaps", EnvPrefix: "DOCPRESSER_", ConfigName: "docpresser"}
 	logger, err := logging.NewCLI(identity.BinaryName)
 	if err != nil {
@@ -342,4 +342,12 @@ func TestParseFileLayerRejectsMalformedUnicode(t *testing.T) {
 			t.Fatalf("parseFileLayer(%q) accepted malformed Unicode: %v", input, layer)
 		}
 	}
+}
+
+// setTestHome points the user home directory at dir on every platform:
+// os.UserHomeDir reads HOME on Unix and USERPROFILE on Windows.
+func setTestHome(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
 }
