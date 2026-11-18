@@ -24,8 +24,9 @@ func validRunManifest() map[string]any {
 			"coordinator_sha256": strings.Repeat("d", 64),
 		},
 		"subjects": []any{map[string]any{
-			"name": "go-yamlv3", "role": "baseline", "subject_version": "v3.0.1 (go1.26.10)",
-			"language": "go", "engine": "gopkg.in/yaml.v3",
+			"name": "go-yamlv3", "role": "baseline", "driver_subject": "go-yamlv3",
+			"subject_version": "v3.0.1 (go1.26.10)",
+			"language":        "go", "engine": "gopkg.in/yaml.v3",
 			"formats": []any{"yaml"}, "operations": []any{"load_value"},
 			"driver_sha256": strings.Repeat("e", 64),
 		}},
@@ -54,7 +55,7 @@ func TestRunManifestRequiresHandshakeIdentity(t *testing.T) {
 		t.Fatal("manifest without docpresser_version accepted")
 	}
 
-	for _, field := range []string{"subject_version", "language", "engine", "formats", "operations"} {
+	for _, field := range []string{"driver_subject", "subject_version", "language", "engine", "formats", "operations"} {
 		m := validRunManifest()
 		delete(m["subjects"].([]any)[0].(map[string]any), field)
 		if validateManifest(t, m) == nil {
@@ -63,7 +64,7 @@ func TestRunManifestRequiresHandshakeIdentity(t *testing.T) {
 	}
 
 	for field, bad := range map[string]any{
-		"subject_version": "", "language": "", "engine": "",
+		"driver_subject": "", "subject_version": "", "language": "", "engine": "",
 		"formats": []any{}, "operations": []any{}, "version": "v0.1.0",
 	} {
 		m := validRunManifest()

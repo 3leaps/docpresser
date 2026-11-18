@@ -28,6 +28,7 @@ func TestRecorderEndToEndWithOracle(t *testing.T) {
 		{
 			Name:           "yamlprims-go",
 			Role:           "target",
+			DriverSubject:  "yamlprims-go",
 			SubjectVersion: "v0.2.1 (go1.26.10)",
 			Language:       "go",
 			Engine:         "yamlprims-go",

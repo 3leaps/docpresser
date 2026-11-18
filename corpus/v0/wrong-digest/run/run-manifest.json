@@ -4,8 +4,8 @@
   "state": "complete",
   "run_id": "specimen-wrong-digest",
   "profile": "smoke",
-  "pack_sha256": "1c4f8947e64ea7c47d4974a53073a359f582cd3eed7eba62d0b98358d0133008",
-  "schema_sha256": "3162aa8b49055fafcdf84c3b8133af8899a844bc0684225cf572ff6b0d12f46a",
+  "pack_sha256": "9d9995281874cdbc71bf6b17e6ad73866ef0504bee40aebeee13053a5ade1bf4",
+  "schema_sha256": "c70e007c695e3ed8414b66fef079c4edab52900d593e37877ccb328c04e1389d",
   "observations_sha256": "95251c7f14625853c10302aeef6a4201a12ce8b53ea3ac9174516538bb383212",
   "observation_count": 1,
   "started_at": "2026-11-13T00:00:00Z",
@@ -21,6 +21,7 @@
     {
       "name": "yamlprims-go",
       "role": "target",
+      "driver_subject": "yamlprims-go",
       "subject_version": "v0.2.1 (go1.26.10)",
       "language": "go",
       "engine": "yamlprims-go",

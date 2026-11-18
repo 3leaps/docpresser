@@ -212,6 +212,7 @@ func (c *Client) Metadata() (model.SubjectMetadata, error) {
 	return model.SubjectMetadata{
 		Name:           c.Name,
 		Role:           c.Role,
+		DriverSubject:  h.Subject,
 		SubjectVersion: h.SubjectVersion,
 		Language:       h.Language,
 		Engine:         h.Engine,

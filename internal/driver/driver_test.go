@@ -29,7 +29,8 @@ func buildFaultDriver(t *testing.T) string {
 
 func TestHandshakeRecordsDriverIdentity(t *testing.T) {
 	binPath := buildFaultDriver(t)
-	client, err := NewClient("faultdriver="+binPath, "target")
+	// The CLI name differs from the driver's own subject so the two cannot be confused.
+	client, err := NewClient("fault-probe="+binPath, "target")
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
@@ -47,7 +48,10 @@ func TestHandshakeRecordsDriverIdentity(t *testing.T) {
 		len(meta.Formats) != 1 || meta.Formats[0] != "yaml" || len(meta.Operations) != 1 || meta.Operations[0] != "load_value" {
 		t.Fatalf("Metadata did not record the handshake: %+v", meta)
 	}
-	if meta.Name != "faultdriver" || meta.Role != "target" || meta.DriverSHA256 != client.DriverSHA256 {
+	if meta.DriverSubject != "faultdriver" {
+		t.Fatalf("Metadata did not record the driver's subject: %+v", meta)
+	}
+	if meta.Name != "fault-probe" || meta.Role != "target" || meta.DriverSHA256 != client.DriverSHA256 {
 		t.Fatalf("Metadata lost client identity: %+v", meta)
 	}
 }
