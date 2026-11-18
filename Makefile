@@ -1,8 +1,12 @@
 .PHONY: all help bootstrap bootstrap-force hooks-ensure tools sync dependencies verify-dependencies version version-set version-bump-major version-bump-minor version-bump-patch
-.PHONY: check lint test build install build-all package package-sign verify-release-key clean fmt fmt-check check-all precommit prepush pr-final license-audit license-check license-check-test content-check
+.PHONY: check lint test build install build-all package package-sign release-verify-keys verify-release-key clean fmt fmt-check check-all precommit prepush pr-final license-audit license-check license-check-test content-check
 .PHONY: release-check release-prepare release-build doctor validate-app-identity
 .PHONY: sync-embedded-identity verify-embedded-identity test-standalone-binary cdrl-verify test-cdrl-verify
 .PHONY: verify-toolchain
+.PHONY: release-guard-tag-name release-guard-tag-version release-guard-signing-tag release-guard-release-surfaces sync-changelog-links
+.PHONY: release-prepare-tag-message release-tag release-push-tag release-verify-tag release-verify-published-tag release-verify-remote-tag
+.PHONY: release-export-pin release-validate-pin release-insert-anchors release-github-preflight release-preflight
+.PHONY: release-tooling-test release-tag-tests release-anchors-check surface-scan surface-scan-release
 
 # Binary and version information
 BINARY_NAME := docpresser
@@ -58,7 +62,7 @@ GONEAT_BIN = $(firstword $(wildcard $(BINDIR)/goneat$(BINARY_EXT)) $(shell comma
 all: fmt test
 
 help:  ## Show this help message
-	@printf "%b" '$(BINARY_NAME) - Available Make Targets\n\nRequired targets (Fulmen Makefile Standard):\n  help                     - Show this help message\n  bootstrap                - Install external tools (goneat) and dependencies\n  bootstrap-force          - Force reinstall external tools\n  tools                    - Verify external tools are available\n  sync                     - Compatibility target (embedded assets are explicitly pinned)\n  sync-embedded-identity   - Sync embedded identity mirror (.fulmen → internal/assets)\n  verify-embedded-identity - Verify embedded identity mirror is in sync\n  dependencies             - Generate SBOM for supply-chain security\n  license-audit            - Audit dependency licenses\n  license-check            - Verify verbatim LICENSE-MIT, LICENSE-APACHE, and NOTICE\n  content-check            - Verify committed files contain no local paths, keys, or tokens\n  lint                     - Run lint/format/style checks\n  test                     - Run all tests\n  build                    - Build distributable artifacts\n  install                  - Install binary to BINDIR (default: ~/.local/bin)\n  build-all                - Build multi-platform binaries\n  test-standalone-binary   - Verify built binary works outside repo\n  clean                    - Remove build artifacts and caches\n  fmt                      - Format code\n  fmt-check                - Check formatting without mutating (CI gate)\n  version                  - Print current version\n  version-set              - Set version to specific value (VERSION=x.y.z)\n  version-bump-major       - Bump major version\n  version-bump-minor       - Bump minor version\n  version-bump-patch       - Bump patch version\n  release-check            - Run release checklist validation\n  release-prepare          - Prepare for release\n  release-build            - Build release artifacts\n  check                    - Complete non-mutating validation gate\n  check-all                - Run all quality checks (fmt, lint, test)\n  precommit                - Run pre-commit hooks\n  prepush                  - Run pre-push hooks\n  pr-final                 - Non-mutating PR gate\n\nIdentity and source checks:\n  doctor                   - Run foundation checks\n  validate-app-identity    - Validate app identity configuration\n  cdrl-verify              - Fast residue detector (fails on template strings)\n'
+	@printf "%b" '$(BINARY_NAME) - Available Make Targets\n\nRequired targets (Fulmen Makefile Standard):\n  help                     - Show this help message\n  bootstrap                - Install external tools (goneat) and dependencies\n  bootstrap-force          - Force reinstall external tools\n  tools                    - Verify external tools are available\n  sync                     - Compatibility target (embedded assets are explicitly pinned)\n  sync-embedded-identity   - Sync embedded identity mirror (.fulmen → internal/assets)\n  verify-embedded-identity - Verify embedded identity mirror is in sync\n  dependencies             - Generate SBOM for supply-chain security\n  license-audit            - Audit dependency licenses\n  license-check            - Verify verbatim LICENSE-MIT, LICENSE-APACHE, and NOTICE\n  content-check            - Verify committed files contain no local paths, keys, or tokens\n  lint                     - Run lint/format/style checks\n  test                     - Run all tests\n  build                    - Build distributable artifacts\n  install                  - Install binary to BINDIR (default: ~/.local/bin)\n  build-all                - Build multi-platform binaries\n  test-standalone-binary   - Verify built binary works outside repo\n  clean                    - Remove build artifacts and caches\n  fmt                      - Format code\n  fmt-check                - Check formatting without mutating (CI gate)\n  version                  - Print current version\n  version-set              - Set version to specific value (VERSION=x.y.z)\n  version-bump-major       - Bump major version\n  version-bump-minor       - Bump minor version\n  version-bump-patch       - Bump patch version\n  release-check            - Run release checklist validation\n  release-prepare          - Prepare for release\n  release-build            - Build release artifacts\n  release-preflight        - Pre-tag release gate (see RELEASE_CHECKLIST.md)\n  release-tooling-test     - Run release tooling test suites (throwaway keys)\n  release-anchors-check    - Check committed public pin against fingerprint anchors\n  release-guard-release-surfaces - Verify CHANGELOG.md matches VERSION\n  sync-changelog-links     - Sync CHANGELOG compare-link footers to VERSION\n  check                    - Complete non-mutating validation gate\n  check-all                - Run all quality checks (fmt, lint, test)\n  precommit                - Run pre-commit hooks\n  prepush                  - Run pre-push hooks\n  pr-final                 - Non-mutating PR gate\n\nIdentity and source checks:\n  doctor                   - Run foundation checks\n  validate-app-identity    - Validate app identity configuration\n  cdrl-verify              - Fast residue detector (fails on template strings)\n'
 
 bootstrap:  ## Install external tools via sfetch + goneat
 	@echo "Installing external tools..."
@@ -170,6 +174,100 @@ release-prepare:  ## Prepare for release (tests, checks)
 release-build: build-all  ## Build release artifacts (binaries + checksums)
 	@echo "✅ Release build complete"
 
+# Signed-tag release ceremony. Releases are source-only signed tags; see
+# RELEASE_CHECKLIST.md. Flow: release-preflight -> release-prepare-tag-message
+# -> release-tag (local, signed, verified) -> release-push-tag ->
+# release-verify-published-tag.
+
+release-github-preflight:  ## Verify remote GitHub Tag Publish Protection ruleset and immutable releases
+	@./scripts/release-github-preflight.sh
+
+release-preflight:  ## Pre-tag gate: clean synced main, changelog, pins, dates, and release surface scan
+	@./scripts/release-verify-committed-anchors.sh
+	@$(MAKE) surface-scan-release
+	@./scripts/release-preflight.sh
+
+release-guard-tag-name:  ## Guard: DOCPRESSER_RELEASE_TAG set and canonical vX.Y.Z (no VERSION check)
+	@if [ -z "$(DOCPRESSER_RELEASE_TAG)" ]; then \
+		echo "❌ DOCPRESSER_RELEASE_TAG not set (example: DOCPRESSER_RELEASE_TAG=v$(VERSION))." >&2; \
+		exit 1; \
+	fi
+	@printf '%s\n' "$(DOCPRESSER_RELEASE_TAG)" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$$' || { \
+		echo "❌ DOCPRESSER_RELEASE_TAG must be canonical vX.Y.Z" >&2; exit 1; }
+	@echo "[ok] release tag name $(DOCPRESSER_RELEASE_TAG) is canonical"
+
+release-guard-tag-version:  ## Guard: DOCPRESSER_RELEASE_TAG canonical, matches VERSION and app identity
+	@if [ -z "$(DOCPRESSER_RELEASE_TAG)" ]; then \
+		echo "❌ DOCPRESSER_RELEASE_TAG not set (example: DOCPRESSER_RELEASE_TAG=v$(VERSION))." >&2; \
+		exit 1; \
+	fi
+	@DOCPRESSER_RELEASE_TAG="$(DOCPRESSER_RELEASE_TAG)" ./scripts/release-guard-tag-version.sh
+	@APP_VERSION="$$(awk -F': ' '/^[[:space:]]*version:/ {gsub(/"/, "", $$2); print $$2; exit}' .fulmen/app.yaml)"; \
+	if [ "$$APP_VERSION" != "$(VERSION)" ]; then \
+		echo "❌ App version mismatch: $$APP_VERSION != $(VERSION) (VERSION file)" >&2; \
+		exit 1; \
+	fi
+
+release-guard-signing-tag: release-guard-tag-version  ## Guard: DOCPRESSER_RELEASE_TAG matches VERSION and app identity
+	@:
+
+release-guard-release-surfaces:  ## Verify CHANGELOG.md section and compare links match VERSION
+	@./scripts/release-guard-release-surfaces.sh
+
+sync-changelog-links:  ## Sync CHANGELOG compare-link footers to VERSION
+	@./scripts/sync-changelog-links.sh
+
+# Signed version tag (maintainer machine only; see RELEASE_CHECKLIST.md). Uses
+# DOCPRESSER_RELEASE_TAG, DOCPRESSER_TAG_MESSAGE_DIR, DOCPRESSER_TAGGER_NAME,
+# DOCPRESSER_TAGGER_EMAIL, DOCPRESSER_GPG_SIGNING_FINGERPRINT,
+# DOCPRESSER_PGP_KEY_ID (<subkey>!), DOCPRESSER_GPG_HOMEDIR and
+# DOCPRESSER_DECERNOR_BIN.
+
+release-prepare-tag-message:  ## Maintainer-only: prepare and review the external per-cut tag message
+	@./scripts/release-tag-operator.sh prepare-message
+
+release-tag:  ## Maintainer-only: create and verify a local signed version tag (no push)
+	@./scripts/release-tag-operator.sh local-tag
+
+release-push-tag:  ## Maintainer-only: publish and verify the signed version tag
+	@./scripts/release-tag-operator.sh remote-push
+
+release-verify-tag:  ## Verify the local tag using only the committed public pin
+	@./scripts/release-verify-tag.sh
+
+# The published-tag check installs the remote tag as the local ref only after
+# every check passes.
+release-verify-published-tag: release-guard-tag-name  ## Verify the published tag object and signature against its committed pin
+	@DOCPRESSER_RELEASE_TAG="$(DOCPRESSER_RELEASE_TAG)" ./scripts/release-verify-published-tag.sh
+
+release-verify-remote-tag:  ## Compare local and remote tag objects and GitHub verification
+	@./scripts/release-verify-remote-tag.sh
+
+release-export-pin:  ## Maintainer-only: export the approved public key when no pin exists
+	@./scripts/release-export-pin.sh
+
+release-validate-pin:  ## Maintainer-only: read-only validation of the existing public pin
+	@./scripts/release-validate-pin.sh
+
+release-insert-anchors: release-validate-pin  ## Maintainer-only: validate pin, then generate absent public anchors
+	@./scripts/release-insert-anchors.sh
+
+release-anchors-check:  ## Check the committed public key against both fingerprint anchors (needs gpg, DOCPRESSER_DECERNOR_BIN)
+	@./scripts/release-verify-committed-anchors.sh
+	@./scripts/validate-release-anchors.sh
+
+release-tooling-test:  ## Run all release and surface-hygiene tooling test suites
+	@./scripts/release-tooling-test.sh
+
+release-tag-tests: release-tooling-test  ## Signed-tag tooling tests (throwaway keys only; needs gpg, git, python3, jq, make, decernor)
+	@echo "✅ Signed-tag tooling tests passed"
+
+surface-scan: content-check  ## Run two-tier public-surface hygiene checks
+	@./scripts/surface-scan.sh
+
+surface-scan-release: content-check  ## Run release-mode public-surface hygiene checks (requires external limensafe catalog)
+	@DOCPRESSER_SURFACE_SCAN_REQUIRED=1 DOCPRESSER_SURFACE_SCOPE=release ./scripts/surface-scan.sh
+
 build: verify-embedded-identity  ## Build binary for current platform
 	@echo "→ Building $(BINARY_NAME) v$(VERSION)..."
 	@mkdir -p bin
@@ -227,8 +325,12 @@ package: build-all  ## Package release archives and checksums to dist/release (n
 package-sign: build-all  ## Package release archives and sign SHA256SUMS (requires gpg, SIGN=1 optional)
 	@SIGN=1 BINARY_NAME=$(BINARY_NAME) ./scripts/package-artifacts.sh
 
-verify-release-key:  ## Verify exported public key contains no private material (run package-sign with SIGNING_KEY_ID)
+release-verify-keys:  ## Verify exported public key contains no private material (run package-sign with SIGNING_KEY_ID)
 	@./scripts/verify-public-key.sh dist/release/$(BINARY_NAME)-release-signing-key.asc
+
+# Deprecated alias (kept for one cycle).
+verify-release-key: release-verify-keys  ## Deprecated: use release-verify-keys
+	@echo "⚠️  verify-release-key is deprecated; use make release-verify-keys" >&2
 
 test: verify-embedded-identity  ## Run all tests
 	@echo "Running test suite..."

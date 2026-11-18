@@ -95,7 +95,7 @@ echo "  ✅ No PRIVATE KEY blocks detected (negative check)"
 echo "  ✅ PUBLIC KEY blocks present (positive check)"
 echo "  ✅ GPG verification confirms no secret keys"
 echo ""
-echo "Proceed with upload: gh release upload v<version> *.asc"
+echo "Safe to attach to the release."
 echo ""
 
 exit 0
