@@ -8,10 +8,23 @@ import { fileURLToPath } from "node:url";
 
 const PROTOCOL_VERSION = "docpresser-driver/v0";
 
-// engine is the loaded js-yaml ({ api, version }) or the load failure
-// ({ error }). It is loaded once, with the same ESM import every YAML case
-// uses, so the handshake only succeeds for an engine that actually loads.
-let engine = { error: new Error("js-yaml not loaded yet") };
+// engine is { ok: true, api, version } for a loaded js-yaml, or
+// { ok: false, error } with whatever value the load threw (which may be falsy).
+// It is loaded once, with the same ESM import every YAML case uses, so the
+// handshake only succeeds for an engine that actually loads.
+let engine = { ok: false, error: new Error("js-yaml not loaded yet") };
+
+// describeError renders any thrown value, including non-Error and falsy ones.
+function describeError(err) {
+	try {
+		if (err instanceof Error) {
+			return err.message || err.name;
+		}
+		return `non-Error value thrown: ${String(err)}`;
+	} catch {
+		return "unprintable value thrown";
+	}
+}
 
 function packageVersion(entryPath) {
 	let dir = path.dirname(entryPath);
@@ -44,14 +57,14 @@ async function loadEngine() {
 		if (!version) {
 			throw new Error("cannot read the js-yaml package version");
 		}
-		return { api, version };
+		return { ok: true, api, version };
 	} catch (error) {
-		return { error };
+		return { ok: false, error };
 	}
 }
 
 function subjectVersion() {
-	const v = engine.version ? engine.version : "unavailable";
+	const v = engine.ok ? engine.version : "unavailable";
 	return `js-yaml ${v} (node ${process.version})`;
 }
 
@@ -126,10 +139,8 @@ async function main() {
 	engine = await loadEngine();
 	const args = process.argv.slice(2);
 	if (args.includes("--docpresser-handshake")) {
-		if (engine.error) {
-			const reason = String(engine.error.message || engine.error).split(
-				"\n",
-			)[0];
+		if (!engine.ok) {
+			const reason = describeError(engine.error).split("\n")[0];
 			process.stderr.write(
 				`node-yaml driver: js-yaml cannot be loaded: ${reason}\n`,
 			);
@@ -192,10 +203,21 @@ async function main() {
 		return;
 	}
 
+	if (!engine.ok) {
+		process.stdout.write(
+			JSON.stringify({
+				version: PROTOCOL_VERSION,
+				case_id: caseId,
+				subject: "node-yaml",
+				subject_version: subjectVersion(),
+				status: "unsupported",
+				error_phase: "driver",
+				error_code: "missing_js_yaml",
+			}) + "\n",
+		);
+		return;
+	}
 	try {
-		if (engine.error) {
-			throw engine.error;
-		}
 		const docs = engine.api.loadAll(text);
 		const normDocs = (docs.length === 0 ? [null] : docs).map((d) =>
 			toNotation(d),

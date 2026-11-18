@@ -85,6 +85,14 @@ func TestNodeDriverReportsOnlyTheEngineThatRuns(t *testing.T) {
 			"index.js":     "module.exports = { load: () => null };\n",
 		},
 	}
+	// Initializers that throw falsy or non-Error values must fail just as
+	// loudly as ones that throw an Error.
+	for _, thrown := range []string{"null", "undefined", "0", "''", "false", "NaN", "0n"} {
+		failing["init throws "+thrown] = map[string]string{
+			"package.json": pkg,
+			"index.js":     "throw " + thrown + ";\n",
+		}
+	}
 	for name, files := range failing {
 		t.Run(name, func(t *testing.T) {
 			out, stderr, err := run(t, install(t, files))
