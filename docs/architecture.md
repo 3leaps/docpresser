@@ -1,7 +1,12 @@
 # Architecture
 
-Status: initial implementation direction. No runtime, containment, or benchmark
-result is claimed until verified execution evidence is recorded.
+Status: target design. Version 0.1.0 implements part of it: drivers run as
+separate processes with a wall-clock timeout, a temporary working directory, a
+scrubbed environment, and capped output; on Unix the process group is
+terminated on timeout and peak memory is measured after exit. Network
+isolation, enforced memory ceilings, read-only working directories, and
+container execution described below are target design, not yet implemented.
+No benchmark result is claimed until verified execution evidence is recorded.
 
 ## Foundation and pins
 
@@ -46,7 +51,7 @@ internal/cmd/                     commands and exit-code mapping
 internal/config/                  typed runtime and campaign configuration
 internal/pack/                    pack.json manifest, corpus-pin binding, validation
 internal/generate/                deterministic seeded synthetic workload generators
-internal/containment/             subprocess/container resource limits, RSS & signal capture
+internal/containment/             subprocess supervision (timeout, output caps), RSS & signal capture
 internal/driver/                  line-delimited JSON / batch-manifest driver client
 internal/evidence/                NDJSON evidence recorders and run inventories
 internal/oracle/                  independent correctness, containment, and divergence verifier
@@ -94,18 +99,20 @@ directory cannot supply its own input authority.
 
 ## Out-of-process driver protocol and crash/OOM containment
 
-Subject engines execute as separate OS processes (or rootless containers for
-untrusted/C incumbent stress profiles) invoked by `internal/containment` and
-`internal/driver`:
+Subject engines execute as separate OS processes invoked by
+`internal/containment` and `internal/driver`. Rootless containers for
+untrusted/C incumbent stress profiles are target design, not yet implemented.
 
 - **Single-case containment mode (conformance, hostile/diabolical bombs,
-  migration audits):** runs with a strict wall-clock timeout, OS memory/RSS
-  ceiling, read-only or empty scratch directory, and no network access. The
-  parent coordinator owns the NDJSON evidence log outside the worker process. If
+  migration audits):** runs with a strict wall-clock timeout, an empty
+  temporary working directory, a scrubbed environment, and capped output. An
+  enforced OS memory/RSS ceiling, a read-only scratch directory, and network
+  isolation are target design, not yet implemented. The parent coordinator owns the NDJSON evidence log outside the worker process. If
   a subject triggers `SIGSEGV`, `SIGABRT`, C-stack overflow, OOM-kill
   (`SIGKILL`), or timeout on a billion-laughs alias/entity bomb, the parent
   survives intact and records the exact wait status, signal, elapsed duration,
-  and peak child RSS (`getrusage` / cgroup / Job Object / `sysprims` evidence).
+  and peak child RSS (`getrusage` on Unix; cgroup, Job Object, and `sysprims`
+  evidence are target design).
 - **Batch throughput mode (warm/cold latency & RSS telemetry on valid
   workloads):** streams a bounded trial manifest to the driver process over
   NDJSON stdin/stdout, recording per-iteration parse/emit/canonicalize nanos,
