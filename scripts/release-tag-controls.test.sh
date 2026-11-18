@@ -361,8 +361,9 @@ selector = stmt(r"^tag_key_selector$")
 signing = stmt(r"^tag_prepare_signing_home$")
 if trap < 0 or selector < 0 or signing < 0 or not (trap < selector < signing):
     raise SystemExit(f'order trap={trap} selector={selector} signing={signing}')
-if not any('TERM' in ln and 'tag_cleanup_homes' in ln for ln in lines):
-    raise SystemExit('cleanup trap must include TERM')
+signal_traps = [ln for ln in lines if re.match(r"^trap 'tag_cleanup_homes", ln) and 'exit 143' in ln]
+if len(signal_traps) < 2 or not all(re.search(r"' (TERM INT|INT TERM)$", ln) for ln in signal_traps):
+    raise SystemExit('every cleanup signal trap must include TERM and INT')
 PY_CHECK
 if [[ $cleanup_rc -ne 0 ]]; then
     echo 'error: release-tag.sh must arm cleanup before creating verification homes' >&2
