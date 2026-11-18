@@ -6,6 +6,10 @@ rust-version = "1.88.0"
 license = "MIT OR Apache-2.0"
 publish = false
 
+# Its own workspace root: the Cargo.lock beside this file is always the active
+# lock, which build.rs reads to report the linked yamlprims version.
+[workspace]
+
 [[bin]]
 name = "yamlprims-rust"
 path = "src/main.rs"
