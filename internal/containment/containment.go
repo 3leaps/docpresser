@@ -80,7 +80,7 @@ func Run(ctx context.Context, spec Spec) (*Result, error) {
 		maxOut = defaultMaxOutputBytes
 	}
 
-	scratchDir, err := os.MkdirTemp("", "docpresser-sandbox-*")
+	scratchDir, err := os.MkdirTemp("", "docpresser-run-*")
 	if err != nil {
 		return nil, fmt.Errorf("create containment scratch dir: %w", err)
 	}
