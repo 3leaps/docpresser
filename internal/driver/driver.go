@@ -192,6 +192,13 @@ func parseHandshake(stdout []byte) (*Handshake, error) {
 	if len(h.Formats) == 0 || len(h.Operations) == 0 {
 		return nil, fmt.Errorf("formats and operations must be non-empty")
 	}
+	for _, list := range [][]string{h.Formats, h.Operations} {
+		for _, entry := range list {
+			if strings.TrimSpace(entry) == "" {
+				return nil, fmt.Errorf("formats and operations must not contain empty entries")
+			}
+		}
+	}
 	return &h, nil
 }
 

@@ -97,6 +97,21 @@ func TestRunnerAndOracle_FaultDriverEndToEnd(t *testing.T) {
 	}); err == nil || !strings.Contains(err.Error(), "handshake") {
 		t.Fatalf("runner.Run with a failing handshake: err = %v, want a handshake error", err)
 	}
+	for _, mode := range []string{"empty_version", "blank_format", "null_operation"} {
+		dir := filepath.Join(t.TempDir(), "bad-"+mode)
+		if _, err := Run(context.Background(), Options{
+			PackDir:      cleanPackDir,
+			Profile:      "diabolical-containment",
+			RunID:        "fault-bad-" + mode,
+			SubjectSpecs: []string{"faultdriver=" + binPath + " --handshake=" + mode},
+			OutDir:       dir,
+		}); err == nil || !strings.Contains(err.Error(), "handshake") {
+			t.Fatalf("runner.Run with handshake mode %s: err = %v, want a handshake error", mode, err)
+		}
+		if _, statErr := os.Stat(dir); !os.IsNotExist(statErr) {
+			t.Fatalf("handshake mode %s left evidence at %s (stat err = %v)", mode, dir, statErr)
+		}
+	}
 	if _, statErr := os.Stat(filepath.Join(badRunDir, "run-manifest.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("a failed handshake must not leave a run-manifest.json (stat err = %v)", statErr)
 	}

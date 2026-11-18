@@ -63,6 +63,8 @@ func TestHandshakeRejectsFaultyReplies(t *testing.T) {
 		"wrong_protocol": "protocol version",
 		"empty_version":  "empty subject_version",
 		"no_formats":     "formats and operations must be non-empty",
+		"blank_format":   "must not contain empty entries",
+		"null_operation": "must not contain empty entries",
 		"extra_field":    "malformed reply",
 		"trailing":       "trailing data",
 		"hang":           "timed out",

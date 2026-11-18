@@ -50,6 +50,10 @@ func handshake(mode string) {
 		reply["subject_version"] = " "
 	case "no_formats":
 		reply["formats"] = []string{}
+	case "blank_format":
+		reply["formats"] = []string{"yaml", ""}
+	case "null_operation":
+		reply["operations"] = []any{"load_value", nil}
 	case "extra_field":
 		reply["unexpected"] = true
 	case "trailing":

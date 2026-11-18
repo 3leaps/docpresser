@@ -69,8 +69,12 @@ type caseResponse struct {
 	HazardsFound   []string `json:"hazards_found,omitempty"`
 }
 
+// subjectVersion names both engines this driver runs: yamlprims for YAML and
+// JSON loading, canonprims for the JCS projection.
 func subjectVersion() string {
-	return moduleVersion("github.com/3leaps/yamlprims") + " (" + runtime.Version() + ")"
+	return "yamlprims " + moduleVersion("github.com/3leaps/yamlprims") +
+		", canonprims " + moduleVersion("github.com/3leaps/canonprims") +
+		" (" + runtime.Version() + ")"
 }
 
 // moduleVersion reports the version of mod linked into this binary, read from
