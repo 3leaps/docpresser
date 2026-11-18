@@ -143,7 +143,9 @@ func TestWave1Profiles_EndToEndQualification(t *testing.T) {
 			RunID:        "wave1-migration",
 			SubjectSpecs: []string{"yamlprims-go=" + yamlprimsBin},
 			BaselineSpecs: []string{
-				"python-pyyaml-safe=python3 " + pyDriverPath + " --engine pyyaml-safe",
+				// The driver's built-in YAML 1.1 parser is the deterministic YAML 1.1
+				// baseline here; PyYAML is not a test dependency.
+				"python-builtin-yaml11=python3 " + pyDriverPath + " --engine builtin-yaml11",
 				"go-yamlv3=" + yamlv3Bin,
 			},
 			OutDir: runDir,

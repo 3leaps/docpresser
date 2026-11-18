@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Standalone Python YAML subject driver implementing docpresser-driver/v0.
 
-Supports:
-  --engine pyyaml-safe   (default: PyYAML SafeLoader when installed, or built-in YAML 1.1 fallback)
-  --engine pyyaml-csafe  (PyYAML CSafeLoader / libyaml when available)
-  --engine yamlprims     (yamlprims Python bindings when installed)
+Engines (no silent fallback: an engine that is not available fails the
+handshake and every case, so evidence is never credited to the wrong parser):
+  --engine pyyaml-safe     (default) PyYAML SafeLoader; requires PyYAML
+  --engine pyyaml-csafe    PyYAML CSafeLoader; requires PyYAML built with libyaml
+  --engine builtin-yaml11  the small YAML 1.1 parser in this file
 """
 
 import base64
@@ -49,22 +50,53 @@ def parse_engine(argv: list[str]) -> str:
     return engine
 
 
-def subject_version() -> str:
+ENGINES = ("pyyaml-safe", "pyyaml-csafe", "builtin-yaml11")
+
+
+class EngineUnavailable(Exception):
+    """The requested engine is unknown or not installed."""
+
+
+def resolve_engine(engine: str):
+    """Return (loader, subject_version) for exactly the requested engine."""
     py_ver = platform.python_version()
+    if engine not in ENGINES:
+        raise EngineUnavailable(
+            f"unknown engine {engine!r}; supported: {', '.join(ENGINES)}"
+        )
+    if engine == "builtin-yaml11":
+        return None, f"builtin-yaml11 (python {py_ver})"
     try:
         import yaml  # type: ignore
+    except ImportError as exc:
+        raise EngineUnavailable(f"engine {engine} requires PyYAML") from exc
+    yaml_ver = getattr(yaml, "__version__", "unknown")
+    if engine == "pyyaml-safe":
+        return yaml.SafeLoader, f"PyYAML {yaml_ver} (python {py_ver})"
+    loader = getattr(yaml, "CSafeLoader", None)
+    if loader is None:
+        raise EngineUnavailable(
+            "engine pyyaml-csafe requires PyYAML built with libyaml"
+        )
+    libyaml_ver = "unknown"
+    try:
+        from yaml import _yaml  # type: ignore
 
-        yaml_ver = getattr(yaml, "__version__", "unknown")
+        libyaml_ver = _yaml.get_version_string()
     except Exception:
-        yaml_ver = "builtin-yaml11"
-    return f"{yaml_ver} (python {py_ver})"
+        pass
+    return loader, f"PyYAML {yaml_ver} with libyaml {libyaml_ver} (python {py_ver})"
+
+
+def subject_version(engine: str) -> str:
+    return resolve_engine(engine)[1]
 
 
 def handshake(engine: str) -> dict:
     return {
         "version": PROTOCOL_VERSION,
         "subject": f"python-{engine}",
-        "subject_version": subject_version(),
+        "subject_version": subject_version(engine),
         "language": "python",
         "engine": engine,
         "formats": ["yaml", "json"],
@@ -278,22 +310,19 @@ def builtin_yaml11_load_all(text: str) -> list:
 
 
 def load_yaml_documents(text: str, engine: str) -> list:
-    try:
-        import yaml  # type: ignore
-
-        loader_cls = yaml.SafeLoader
-        if engine == "pyyaml-csafe":
-            loader_cls = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
-        docs = list(yaml.load_all(text, Loader=loader_cls))
-        return docs if docs else [None]
-    except ImportError:
+    loader_cls, _ = resolve_engine(engine)
+    if loader_cls is None:
         return builtin_yaml11_load_all(text)
+    import yaml  # type: ignore
+
+    docs = list(yaml.load_all(text, Loader=loader_cls))
+    return docs if docs else [None]
 
 
 def execute_case(req: dict, engine: str) -> dict:
     case_id = req.get("case_id", "")
     subj = f"python-{engine}"
-    subj_ver = subject_version()
+    subj_ver = subject_version(engine)
     op = req.get("operation", "load_value")
     if op and op != "load_value":
         return {
@@ -372,6 +401,11 @@ def execute_case(req: dict, engine: str) -> dict:
 
 def main() -> None:
     engine = parse_engine(sys.argv[1:])
+    try:
+        resolve_engine(engine)
+    except EngineUnavailable as exc:
+        sys.stderr.write(f"python-yaml driver: {exc}\n")
+        sys.exit(2)
     if "--docpresser-handshake" in sys.argv[1:]:
         sys.stdout.write(json.dumps(handshake(engine), separators=(",", ":")) + "\n")
         return
