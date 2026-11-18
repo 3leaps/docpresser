@@ -21,7 +21,9 @@ artifacts are published.
       `make release-tooling-test`
 - [ ] Committed public pin agrees with both fingerprint anchors:
       `make release-anchors-check`
-- [ ] Public-surface hygiene and content checks passing: `make surface-scan`
+- [ ] Public-surface scan with the catalog passing for the release pull
+      request: `make pr-final` (needs `LIMENSAFE_CATALOG_PATH` and
+      `DOCPRESSER_SURFACE_PR_TEXT`)
 - [ ] Sensitive local data reviewed against the
       [3 Leaps Sensitive Local Data Policy](https://github.com/3leaps/oss-policies/blob/main/SENSITIVE-LOCAL-DATA.md);
       none is stored inside the repository tree relying only on `.gitignore`.
@@ -90,14 +92,16 @@ Optional inputs (unset means the default shown):
 | `DOCPRESSER_APPROVED_ENV_LOADER`   | unset         | Maintainer shell file sourced by the tag targets before their guards run. When set it must be an absolute, readable regular file (not a symlink) outside the repository, and it must exit successfully. |
 | `DOCPRESSER_REQUIRE_TAG`           | `0`           | `1` makes `make release-guard-tag-version` require `DOCPRESSER_RELEASE_TAG` instead of defaulting to `v<VERSION>`.                                                                                      |
 | `DOCPRESSER_LIMENSAFE_BIN`         | `limensafe`   | Absolute path to the public-surface scanner when it is not on `PATH`.                                                                                                                                   |
-| `DOCPRESSER_SURFACE_SCOPE`         | `pr`          | `release` scans every commit message in history; the release targets set it themselves.                                                                                                                 |
+| `DOCPRESSER_SURFACE_SCOPE`         | `pr`          | `release` scans every commit message in history; the pull-request and release targets set it themselves.                                                                                                |
 | `DOCPRESSER_SURFACE_BASE`          | `origin/main` | Base commit for the pull-request commit-message scan.                                                                                                                                                   |
 | `DOCPRESSER_SURFACE_PR_TEXT`       | unset         | Non-empty file holding the pull-request title and body to scan.                                                                                                                                         |
-| `DOCPRESSER_SURFACE_SCAN_REQUIRED` | `0`           | `1` fails instead of skipping when `LIMENSAFE_CATALOG_PATH` is unset; the release targets set it themselves.                                                                                            |
+| `DOCPRESSER_SURFACE_SCAN_REQUIRED` | `0`           | `1` fails instead of skipping when `LIMENSAFE_CATALOG_PATH` is unset; `make pr-final` and the release targets set it themselves.                                                                        |
 
 Must stay unset: `DOCPRESSER_SURFACE_RELEASE_BASE` (the release scan refuses
-any override of its base) and `DOCPRESSER_TEST_FAIL_ANCHOR_INSTALL` (a
-fault-injection hook used only by the tooling tests).
+any override of its base), `DOCPRESSER_TEST_FAIL_ANCHOR_INSTALL` (a
+fault-injection hook used only by the tooling tests), and
+`DOCPRESSER_SURFACE_BASELINE_ONLY` and `DOCPRESSER_SURFACE_BRANCH_NAME` (set
+only by the CI baseline scan).
 
 The tag comes only from `DOCPRESSER_RELEASE_TAG`. The version guard and the
 tag targets refuse to start while the generic `RELEASE_TAG` is set, even to an
@@ -111,7 +115,7 @@ empty value, so `unset RELEASE_TAG` first.
 - [ ] Pre-tag gate on the merged `main` commit (committed anchor verification,
       `make surface-scan-release`, changelog and compare links, GitHub
       preflight, content-check, dates check, clean-clone test outside the home
-      directory, and `make pr-final`): `make release-preflight`
+      directory, and `make check`): `make release-preflight`
 - [ ] Prepare and review the external tag message:
       `make release-prepare-tag-message`
 - [ ] Create and verify the local signed tag: `make release-tag`

@@ -4,8 +4,9 @@
 # run time (invented terms, not the maintainer's): a term in the tree, a commit
 # message, the PR text or the branch name fails; the catalog must block its own
 # canary; a scanner error or a bad report fails closed and visibly; the catalog
-# path rules hold. Needs limensafe; without it this suite is skipped (the scan
-# is a maintainer gate and never runs in CI).
+# path rules hold. The baseline-only mode used by CI must block its built-in
+# sentinel on every surface and refuse a catalog. Needs limensafe; without it
+# this suite is skipped.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd -P)"
 bin="${DOCPRESSER_LIMENSAFE_BIN:-$(command -v limensafe || true)}"
@@ -15,8 +16,9 @@ if [[ -z "$bin" || ! -x "$bin" ]]; then
 fi
 scratch="$(mktemp -d)"
 trap 'rc=$?; rm -rf "$scratch"; exit "$rc"' EXIT
-unset LIMENSAFE_CATALOG_PATH DOCPRESSER_SURFACE_PR_TEXT DOCPRESSER_SURFACE_SCAN_REQUIRED DOCPRESSER_SURFACE_SCOPE
-term="zq""lantern" canary="gon-test-canary-""7f3e19a2"
+unset LIMENSAFE_CATALOG_PATH DOCPRESSER_SURFACE_PR_TEXT DOCPRESSER_SURFACE_SCAN_REQUIRED DOCPRESSER_SURFACE_SCOPE \
+    DOCPRESSER_SURFACE_BASELINE_ONLY DOCPRESSER_SURFACE_BRANCH_NAME DOCPRESSER_SURFACE_BASE
+term="zq""lantern" canary="gon-test-canary-""7f3e19a2" sentinel="DO_NOT_""COMMIT"
 printf '%s==>Codename\n%s==>DocpresserCanary\n' "$term" "$canary" > "$scratch/terms.txt"
 "$bin" catalog build --from-termlist "$scratch/terms.txt" --out "$scratch/catalog.yaml" \
     --catalog-id docpresser-release > /dev/null 2>&1
@@ -36,7 +38,8 @@ git -C "$repo" config core.autocrlf false
 git -C "$repo" config user.name fixture
 git -C "$repo" config user.email fixture@example.invalid
 git -C "$repo" config commit.gpgsign false
-mkdir -p "$repo/scripts"
+mkdir -p "$repo/scripts" "$repo/.limensafe"
+cp "$root/.limensafe/config.yaml" "$repo/.limensafe/"
 cp "$root/scripts/surface-scan.sh" "$root/scripts/surface-canary.py" "$root/scripts/surface-catalog-path.py" \
     "$root/scripts/export-committed-tree.py" "$root/scripts/committed_tree.py" "$repo/scripts/"
 printf 'clean\n' > "$repo/README"
@@ -109,14 +112,14 @@ refused 'outside this repository' LIMENSAFE_CATALOG_PATH="$scratch/wt/inside.yam
 git -C "$repo" worktree remove --force "$scratch/wt"
 refused 'no usable canary' LIMENSAFE_CATALOG_PATH="$scratch/nocanary.yaml"
 refused 'no entity besides DocpresserCanary' LIMENSAFE_CATALOG_PATH="$scratch/onlycanary.yaml"
-refused 'did not load' LIMENSAFE_CATALOG_PATH="$scratch/otherid.yaml"
+refused 'catalog id mismatch' LIMENSAFE_CATALOG_PATH="$scratch/otherid.yaml"
 printf '#!/bin/sh\necho boom >&2\nexit 7\n' > "$scratch/broken"
 chmod +x "$scratch/broken"
 refused 'limensafe exited 7' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_LIMENSAFE_BIN="$scratch/broken"
 printf '#!/bin/sh\nexit 0\n' > "$scratch/silent"
 chmod +x "$scratch/silent"
 refused 'report is missing or invalid' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_LIMENSAFE_BIN="$scratch/silent"
-printf '#!/bin/sh\nprintf %%s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"docpresser-release","load_status":"ok"}],"files_skipped_by_reason":{},"directories_skipped":0},"summary":{"findings_total":1},"findings":[{"decision":"block","replacement_id":"Codename","severity":"high"}]}'"'"'\nexit 1\n' > "$scratch/wrongblock"
+printf '#!/bin/sh\nprintf %%s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"docpresser-release","load_status":"ok"},{"catalog_id":"limensafe-public-baseline-v0","load_status":"ok"}],"files_skipped_by_reason":{},"directories_skipped":0},"summary":{"findings_total":1},"findings":[{"decision":"block","replacement_id":"Codename","severity":"high"}]}'"'"'\nexit 1\n' > "$scratch/wrongblock"
 chmod +x "$scratch/wrongblock"
 refused 'not blocked as DocpresserCanary' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_LIMENSAFE_BIN="$scratch/wrongblock"
 cat > "$scratch/flaky" << SH
@@ -133,7 +136,7 @@ git -C "$repo" commit -qm 'a clean commit message'
 rm -f "$scratch/flaky.count"
 refused 'commit .*: limensafe report is missing or invalid' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_LIMENSAFE_BIN="$scratch/flaky"
 git -C "$repo" reset -q --hard HEAD~1
-printf '#!/bin/sh\nprintf %s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"docpresser-release","load_status":"ok"}],"files_skipped_by_reason":{},"directories_skipped":0},"summary":{"findings_total":0},"findings":[]}'"'"'\nexit 0\n' > "$scratch/blind"
+printf '#!/bin/sh\nprintf %s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"docpresser-release","load_status":"ok"},{"catalog_id":"limensafe-public-baseline-v0","load_status":"ok"}],"files_skipped_by_reason":{},"directories_skipped":0},"summary":{"findings_total":0},"findings":[]}'"'"'\nexit 0\n' > "$scratch/blind"
 chmod +x "$scratch/blind"
 refused 'did not block its canary' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_LIMENSAFE_BIN="$scratch/blind"
 printf 'notes %s\n' "$term" > "$repo/notes.txt"
@@ -163,13 +166,13 @@ git -C "$repo" add big.txt
 git -C "$repo" commit -qm 'add a large file'
 refused '\[block\] tree' ${cat_ok[@]+"${cat_ok[@]}"}
 git -C "$repo" reset -q --hard HEAD~1
-printf '#!/bin/sh\nprintf %%s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"docpresser-release","load_status":"ok"}],"files_skipped_by_reason":{"some_future_reason":1},"directories_skipped":0},"summary":{"findings_total":1},"findings":[{"decision":"block","replacement_id":"DocpresserCanary","severity":"high"}]}'"'"'\nexit 1\n' > "$scratch/skipper"
+printf '#!/bin/sh\nprintf %%s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"docpresser-release","load_status":"ok"},{"catalog_id":"limensafe-public-baseline-v0","load_status":"ok"}],"files_skipped_by_reason":{"some_future_reason":1},"directories_skipped":0},"summary":{"findings_total":1},"findings":[{"decision":"block","replacement_id":"DocpresserCanary","severity":"high"}]}'"'"'\nexit 1\n' > "$scratch/skipper"
 chmod +x "$scratch/skipper"
 refused 'files were skipped, not scanned: some_future_reason=1' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_LIMENSAFE_BIN="$scratch/skipper"
-printf '#!/bin/sh\nprintf %%s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"docpresser-release","load_status":"ok"}],"files_skipped_by_reason":{},"directories_skipped":2},"summary":{"findings_total":1},"findings":[{"decision":"block","replacement_id":"DocpresserCanary","severity":"high"}]}'"'"'\nexit 1\n' > "$scratch/dirskipper"
+printf '#!/bin/sh\nprintf %%s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"docpresser-release","load_status":"ok"},{"catalog_id":"limensafe-public-baseline-v0","load_status":"ok"}],"files_skipped_by_reason":{},"directories_skipped":2},"summary":{"findings_total":1},"findings":[{"decision":"block","replacement_id":"DocpresserCanary","severity":"high"}]}'"'"'\nexit 1\n' > "$scratch/dirskipper"
 chmod +x "$scratch/dirskipper"
 refused 'directories were skipped' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_LIMENSAFE_BIN="$scratch/dirskipper"
-printf '#!/bin/sh\nprintf %%s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"docpresser-release","load_status":"ok"}]},"summary":{"findings_total":1},"findings":[{"decision":"block","replacement_id":"DocpresserCanary","severity":"high"}]}'"'"'\nexit 1\n' > "$scratch/noaccount"
+printf '#!/bin/sh\nprintf %%s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"docpresser-release","load_status":"ok"},{"catalog_id":"limensafe-public-baseline-v0","load_status":"ok"}]},"summary":{"findings_total":1},"findings":[{"decision":"block","replacement_id":"DocpresserCanary","severity":"high"}]}'"'"'\nexit 1\n' > "$scratch/noaccount"
 chmod +x "$scratch/noaccount"
 refused 'does not account for skipped files' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_LIMENSAFE_BIN="$scratch/noaccount"
 printf 'bin\0ary\n' > "$repo/blob.bin"
@@ -209,8 +212,48 @@ passes ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_SURFACE_SCAN_REQUIRED=1 DOCPRESSER
 passes ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_SURFACE_SCAN_REQUIRED=1 DOCPRESSER_SURFACE_SCOPE=release
 refused 'DOCPRESSER_SURFACE_RELEASE_BASE override is not permitted' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_SURFACE_SCOPE=release DOCPRESSER_SURFACE_RELEASE_BASE=HEAD
 refused 'base no-such-ref not found' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_SURFACE_BASE=no-such-ref
+# The catalog-backed scan also requires the built-in baseline to load.
+printf '#!/bin/sh\nprintf %%s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"docpresser-release","load_status":"ok"}],"files_skipped_by_reason":{},"directories_skipped":0},"summary":{"findings_total":1},"findings":[{"decision":"block","replacement_id":"DocpresserCanary","severity":"high"}]}'"'"'\nexit 1\n' > "$scratch/nobaseline"
+chmod +x "$scratch/nobaseline"
+refused 'catalog limensafe-public-baseline-v0 did not load' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_LIMENSAFE_BIN="$scratch/nobaseline"
+refused 'DOCPRESSER_SURFACE_SCOPE must be pr or release' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_SURFACE_SCOPE=Release
+
+# Baseline-only (CI) mode: no catalog, built-in sentinel on every surface.
+bl=(DOCPRESSER_SURFACE_BASELINE_ONLY=1)
+passes "${bl[@]}"
+grep -q '\[ok\] baseline blocks its sentinel' "$scratch/out"
+refused 'requires LIMENSAFE_CATALOG_PATH to be unset' "${bl[@]}" ${cat_ok[@]+"${cat_ok[@]}"}
+refused 'requires LIMENSAFE_CATALOG_PATH to be unset' "${bl[@]}" LIMENSAFE_CATALOG_PATH=
+refused 'cannot satisfy DOCPRESSER_SURFACE_SCAN_REQUIRED=1' "${bl[@]}" DOCPRESSER_SURFACE_SCAN_REQUIRED=1
+refused 'baseline-only scan is PR scope only' "${bl[@]}" DOCPRESSER_SURFACE_SCOPE=release
+refused 'DOCPRESSER_SURFACE_BASELINE_ONLY must be 0 or 1' DOCPRESSER_SURFACE_BASELINE_ONLY=yes
+printf '#!/bin/sh\nprintf %%s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"limensafe-public-baseline-v0","load_status":"ok"}],"files_skipped_by_reason":{},"directories_skipped":0},"summary":{"findings_total":0},"findings":[]}'"'"'\nexit 0\n' > "$scratch/blindbaseline"
+chmod +x "$scratch/blindbaseline"
+refused 'the baseline did not block its sentinel' "${bl[@]}" DOCPRESSER_LIMENSAFE_BIN="$scratch/blindbaseline"
+printf '#!/bin/sh\nprintf %%s '"'"'{"scan_metadata":{"catalogs_loaded":[{"catalog_id":"limensafe-public-baseline-v0","load_status":"missing_error"}],"files_skipped_by_reason":{},"directories_skipped":0},"summary":{"findings_total":1},"findings":[{"decision":"block","severity":"high"}]}'"'"'\nexit 1\n' > "$scratch/nobaseline2"
+chmod +x "$scratch/nobaseline2"
+refused 'catalog limensafe-public-baseline-v0 did not load' "${bl[@]}" DOCPRESSER_LIMENSAFE_BIN="$scratch/nobaseline2"
+printf 'notes %s\n' "$sentinel" > "$repo/notes.txt"
+git -C "$repo" add -A
+git -C "$repo" commit -qm 'add notes'
+refused '\[block\] tree' "${bl[@]}"
+git -C "$repo" reset -q --hard HEAD~1
+printf 'more\n' > "$repo/more.txt"
+git -C "$repo" add -A
+git -C "$repo" commit -qm "mention $sentinel"
+refused '\[block\] commit' "${bl[@]}"
+git -C "$repo" reset -q --hard HEAD~1
+printf 'Title\n\nBody %s\n' "$sentinel" > "$scratch/pr-sentinel.md"
+refused '\[block\] pr text' "${bl[@]}" DOCPRESSER_SURFACE_PR_TEXT="$scratch/pr-sentinel.md"
+passes "${bl[@]}" DOCPRESSER_SURFACE_PR_TEXT="$scratch/pr-clean.md"
+git -C "$repo" switch -q --detach
+refused '\[block\] branch name' "${bl[@]}" DOCPRESSER_SURFACE_BRANCH_NAME="topic-$sentinel"
+passes "${bl[@]}" DOCPRESSER_SURFACE_BRANCH_NAME=topic-clean
+grep -q '\[ok\] branch name' "$scratch/out"
+git -C "$repo" switch -q feature
+
 [[ "$(uname -s)" != Darwin || "${case_checked:-0}" == 1 ]] || {
     echo 'error: the case-alias controls did not run on macOS' >&2
     exit 1
 }
-echo '[ok] surface-scan: catalog location (path, case incl. numeric names, .., hard link), canary and vocabulary, scanner errors, each surface incl. export-ignore, ignore files, oversize files, symlinks and local edits, skip accounting, required PR text'
+echo '[ok] surface-scan: catalog location (path, case incl. numeric names, .., hard link), canary and vocabulary, scanner errors, each surface incl. export-ignore, ignore files, oversize files, symlinks and local edits, skip accounting, required PR text, baseline-only mode'
