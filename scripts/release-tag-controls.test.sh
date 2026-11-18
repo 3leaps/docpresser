@@ -344,7 +344,8 @@ printf 'operator-owned\n' > "$op_home/preserve"
     gpg --batch --list-secret-keys "$op_subkey" > /dev/null 2>&1
 )
 gpgconf --homedir "$op_home" --kill all > /dev/null 2>&1 || true
-if ! python3 - "$root/scripts/release-tag.sh" << 'PY_CHECK'
+cleanup_rc=0
+python3 - "$root/scripts/release-tag.sh" << 'PY_CHECK' || cleanup_rc=$?
 from pathlib import Path
 import re
 import sys
@@ -363,7 +364,7 @@ if trap < 0 or selector < 0 or signing < 0 or not (trap < selector < signing):
 if not any('TERM' in ln and 'tag_cleanup_homes' in ln for ln in lines):
     raise SystemExit('cleanup trap must include TERM')
 PY_CHECK
-then
+if [[ $cleanup_rc -ne 0 ]]; then
     echo 'error: release-tag.sh must arm cleanup before creating verification homes' >&2
     exit 1
 fi
