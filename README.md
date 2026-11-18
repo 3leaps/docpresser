@@ -3,9 +3,14 @@
 Qualification and synthetic-workload harness for structured documents (YAML,
 JSON/I-JSON/JCS, XML, XHTML, SVG; OOXML and PDF in later profiles).
 
-**Status: initial architecture and build packet.** Commands, subject drivers, and
-measurements described in the documentation below are planned until implemented
-and verified by execution evidence.
+**Status: experimental (v0.1.0).** Version 0.1.0 implements the first wave:
+deterministic pack generation, `structcorpus` binding and pack validation,
+out-of-process driver execution under containment supervision with NDJSON
+evidence recording, the independent verifier and summary reports, and YAML and
+JSON (including I-JSON and JCS) subject drivers. XML, XHTML, SVG, text
+extraction, OOXML, and PDF profiles are planned for later waves. Releases are
+source-only signed tags; no binaries are published. Commands, schemas, and
+evidence formats may change before 1.0.
 
 Docpresser generates or binds deterministic workload packs (including pinned
 [`3leaps/structcorpus`](https://github.com/3leaps/structcorpus) releases), drives
