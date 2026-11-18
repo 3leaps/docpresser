@@ -132,6 +132,7 @@ type HostMetadata struct {
 type SubjectMetadata struct {
 	Name           string   `json:"name"`
 	Role           string   `json:"role"`
+	DriverSubject  string   `json:"driver_subject"`
 	SubjectVersion string   `json:"subject_version"`
 	Language       string   `json:"language"`
 	Engine         string   `json:"engine"`

@@ -4,8 +4,8 @@
   "state": "complete",
   "run_id": "specimen-containment-rss-breach",
   "profile": "smoke",
-  "pack_sha256": "a3b92638096d76c505d3442b9b2c8cf540388ccf44e13e6ce24f585292c3aa70",
-  "schema_sha256": "3162aa8b49055fafcdf84c3b8133af8899a844bc0684225cf572ff6b0d12f46a",
+  "pack_sha256": "453cdad65a70dab041e6522a41614d58abcd28e600ff184ef1d57f6c4b787f8e",
+  "schema_sha256": "c70e007c695e3ed8414b66fef079c4edab52900d593e37877ccb328c04e1389d",
   "observations_sha256": "a8027909ccb27386b2e5f1f0cc3a398af0de1eb741ee43b55c153fb9f4998d8f",
   "observation_count": 1,
   "started_at": "2026-11-13T00:00:00Z",
@@ -21,6 +21,7 @@
     {
       "name": "yamlprims-go",
       "role": "target",
+      "driver_subject": "yamlprims-go",
       "subject_version": "v0.2.1 (go1.26.10)",
       "language": "go",
       "engine": "yamlprims-go",

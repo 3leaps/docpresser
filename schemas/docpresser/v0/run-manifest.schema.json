@@ -109,6 +109,7 @@
         "required": [
           "name",
           "role",
+          "driver_subject",
           "subject_version",
           "language",
           "engine",
@@ -127,6 +128,10 @@
               "target",
               "baseline"
             ]
+          },
+          "driver_subject": {
+            "type": "string",
+            "minLength": 1
           },
           "subject_version": {
             "type": "string",

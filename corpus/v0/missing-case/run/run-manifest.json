@@ -4,8 +4,8 @@
   "state": "complete",
   "run_id": "specimen-missing-case",
   "profile": "smoke",
-  "pack_sha256": "9633c6f083c4af5fa27f58f96eaece465a80996fc649dd5b9c34eba0dc5f69af",
-  "schema_sha256": "3162aa8b49055fafcdf84c3b8133af8899a844bc0684225cf572ff6b0d12f46a",
+  "pack_sha256": "9be2ea6f127591e25421367928a499d1b8e439eecf53f7ad71645dc6b37ab3f1",
+  "schema_sha256": "c70e007c695e3ed8414b66fef079c4edab52900d593e37877ccb328c04e1389d",
   "observations_sha256": "a3af442cfbe90d9d2c1f365c07348c74106e34a117742173a8a5b29d7633de4e",
   "observation_count": 1,
   "started_at": "2026-11-13T00:00:00Z",
@@ -21,6 +21,7 @@
     {
       "name": "yamlprims-go",
       "role": "target",
+      "driver_subject": "yamlprims-go",
       "subject_version": "v0.2.1 (go1.26.10)",
       "language": "go",
       "engine": "yamlprims-go",

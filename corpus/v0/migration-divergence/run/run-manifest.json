@@ -4,8 +4,8 @@
   "state": "complete",
   "run_id": "specimen-migration-divergence",
   "profile": "smoke",
-  "pack_sha256": "2f40013d49c4e6c68ad5241550c21a765bc62fd6b809d2bc3678709b8eb50f37",
-  "schema_sha256": "3162aa8b49055fafcdf84c3b8133af8899a844bc0684225cf572ff6b0d12f46a",
+  "pack_sha256": "df902784b19798917391b26898621e14fcffd32c47cea252b25d024d04efdee8",
+  "schema_sha256": "c70e007c695e3ed8414b66fef079c4edab52900d593e37877ccb328c04e1389d",
   "observations_sha256": "1f8e67f5963bddf107ecfb1891bd84cc0d2686b013861426d7d58f2970c0147c",
   "observation_count": 1,
   "started_at": "2026-11-13T00:00:00Z",
@@ -21,6 +21,7 @@
     {
       "name": "yamlprims-go",
       "role": "target",
+      "driver_subject": "yamlprims-go",
       "subject_version": "v0.2.1 (go1.26.10)",
       "language": "go",
       "engine": "yamlprims-go",
