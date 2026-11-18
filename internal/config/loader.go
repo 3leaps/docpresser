@@ -2,17 +2,19 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/fulmenhq/gofulmen/appidentity"
 	fulmenconfig "github.com/fulmenhq/gofulmen/config"
 	"github.com/fulmenhq/gofulmen/logging"
-	"gopkg.in/yaml.v3"
 )
 
 const maxConfigBytes = 64 * 1024
@@ -43,6 +45,9 @@ func LoadConfig(ctx context.Context, identity *appidentity.Identity, logger *log
 
 	fileLayer := map[string]any{}
 	data, err := readFile(filePath)
+	if errors.Is(err, os.ErrNotExist) && source == "default" && legacyUserConfigExists(identity) {
+		return nil, fmt.Errorf("found %s.yaml; the configuration file is now JSON (%s.json)", identity.ConfigName, identity.ConfigName)
+	}
 	if err == nil {
 		fileLayer, err = parseFileLayer(data)
 		if err != nil {
@@ -82,29 +87,122 @@ func LoadConfig(ctx context.Context, identity *appidentity.Identity, logger *log
 	return &Config{RunRoot: runRoot, Source: source}, nil
 }
 
-type fileConfig struct {
-	RunRoot *string `yaml:"run_root"`
-}
+// errConfigShape is the only parse error reported; it never echoes file content.
+var errConfigShape = errors.New(`configuration must be one JSON object with only the supported key "run_root" (a string)`)
 
+// parseFileLayer reads the user configuration: exactly one JSON object whose
+// only permitted key is "run_root" with a string value. Unknown or duplicate
+// keys, other value types, and trailing content are rejected.
 func parseFileLayer(data []byte) (map[string]any, error) {
-	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
-	decoder.KnownFields(true)
-	var parsed fileConfig
-	if err := decoder.Decode(&parsed); err != nil {
-		return nil, errors.New("configuration must be valid YAML containing only supported fields")
+	// encoding/json silently replaces invalid UTF-8 and unpaired surrogate
+	// escapes with U+FFFD, which would change run_root; reject them instead.
+	if !utf8.Valid(data) || !surrogateEscapesPaired(data) {
+		return nil, errors.New("configuration must be valid UTF-8 JSON without unpaired surrogate escapes")
 	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return nil, errors.New("configuration contains multiple documents")
-		}
-		return nil, errors.New("configuration must be valid YAML containing only supported fields")
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	tok, err := dec.Token()
+	if err != nil || tok != json.Delim('{') {
+		return nil, errConfigShape
 	}
 	layer := map[string]any{}
-	if parsed.RunRoot != nil {
-		layer["run_root"] = *parsed.RunRoot
+	for dec.More() {
+		keyTok, err := dec.Token()
+		if err != nil {
+			return nil, errConfigShape
+		}
+		key, ok := keyTok.(string)
+		if !ok || key != "run_root" {
+			return nil, errConfigShape
+		}
+		if _, dup := layer[key]; dup {
+			return nil, errors.New("configuration repeats a key")
+		}
+		valTok, err := dec.Token()
+		if err != nil {
+			return nil, errConfigShape
+		}
+		val, ok := valTok.(string)
+		if !ok {
+			return nil, errConfigShape
+		}
+		layer[key] = val
+	}
+	if tok, err := dec.Token(); err != nil || tok != json.Delim('}') {
+		return nil, errConfigShape
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return nil, errors.New("configuration contains more than one JSON value")
 	}
 	return layer, nil
+}
+
+// surrogateEscapesPaired reports whether every \uXXXX escape inside a JSON
+// string that encodes a UTF-16 surrogate forms a valid high+low pair.
+// Malformed JSON is left for the decoder to reject.
+func surrogateEscapesPaired(data []byte) bool {
+	inString := false
+	for i := 0; i < len(data); i++ {
+		c := data[i]
+		if !inString {
+			if c == '"' {
+				inString = true
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inString = false
+		case '\\':
+			if i+1 >= len(data) {
+				return true
+			}
+			if data[i+1] != 'u' {
+				i++
+				continue
+			}
+			r, ok := hexRune(data, i+2)
+			if !ok {
+				return true
+			}
+			i += 5
+			switch {
+			case utf16.IsSurrogate(r) && r < 0xdc00:
+				if i+6 >= len(data) || data[i+1] != '\\' || data[i+2] != 'u' {
+					return false
+				}
+				low, ok := hexRune(data, i+3)
+				if !ok || low < 0xdc00 || low > 0xdfff {
+					return false
+				}
+				i += 6
+			case utf16.IsSurrogate(r):
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func hexRune(data []byte, at int) (rune, bool) {
+	if at+4 > len(data) {
+		return 0, false
+	}
+	var r rune
+	for _, c := range data[at : at+4] {
+		var d rune
+		switch {
+		case c >= '0' && c <= '9':
+			d = rune(c - '0')
+		case c >= 'a' && c <= 'f':
+			d = rune(c-'a') + 10
+		case c >= 'A' && c <= 'F':
+			d = rune(c-'A') + 10
+		default:
+			return 0, false
+		}
+		r = r<<4 | d
+	}
+	return r, true
 }
 
 func userConfigPath(identity *appidentity.Identity) (string, error) {
@@ -112,8 +210,32 @@ func userConfigPath(identity *appidentity.Identity) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve home directory: %w", err)
 	}
-	path := filepath.Join(homeDir, ".config", identity.Vendor, identity.ConfigName+".yaml")
+	path := filepath.Join(homeDir, ".config", identity.Vendor, identity.ConfigName+".json")
 	return cleanUserConfigPath(homeDir, path)
+}
+
+// legacyUserConfigExists reports whether the pre-JSON user configuration file
+// (<ConfigName>.yaml) is present, so it is reported rather than silently ignored.
+func legacyUserConfigExists(identity *appidentity.Identity) bool {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	legacy, err := cleanUserConfigPath(homeDir, filepath.Join(homeDir, ".config", identity.Vendor, identity.ConfigName+".yaml"))
+	if err != nil {
+		return false
+	}
+	root, err := os.OpenRoot(filepath.Join(homeDir, ".config"))
+	if err != nil {
+		return false
+	}
+	defer func() { _ = root.Close() }()
+	rel, err := filepath.Rel(filepath.Join(homeDir, ".config"), legacy)
+	if err != nil {
+		return false
+	}
+	_, err = root.Lstat(rel)
+	return err == nil
 }
 
 func cleanUserConfigPath(homeDir, path string) (string, error) {
