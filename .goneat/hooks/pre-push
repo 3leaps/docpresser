@@ -80,7 +80,9 @@ fi
 
 # Delegate to `make prepush` so a plain git push runs the same gate as the
 # make target: goneat assess plus the PR-scope public-surface scan.
-# Pass the goneat this hook discovered: make alone searches only BINDIR and PATH.
-make -C "$REPO_ROOT" --no-print-directory GONEAT_BIN="$GONEAT_BIN" prepush
+# Pass the goneat this hook discovered through the environment (make alone
+# searches only BINDIR and PATH). The prepush recipes quote it, so make never
+# re-parses the path and the shell never splits it.
+DOCPRESSER_GONEAT_BIN="$GONEAT_BIN" make -C "$REPO_ROOT" --no-print-directory prepush
 
 echo "✅ Pre-push validation passed!"

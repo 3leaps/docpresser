@@ -117,9 +117,10 @@ verify-dependencies:  ## Alias for dependencies (compatibility)
 	@$(MAKE) dependencies
 
 license-audit:  ## Audit dependency licenses (goneat — enforces .goneat/dependencies.yaml)
-	@if [ -z "$(GONEAT_BIN)" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi
-	@echo "🧪 Auditing dependency licenses (goneat dependencies)..."
-	@$(GONEAT_BIN) dependencies --licenses --fail-on high
+	@goneat="$${DOCPRESSER_GONEAT_BIN:-$(GONEAT_BIN)}"; \
+		if [ -z "$$goneat" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi; \
+		echo "🧪 Auditing dependency licenses (goneat dependencies)..."; \
+		"$$goneat" dependencies --licenses --fail-on high
 	@echo "✅ License audit passed"
 
 license-check:  ## Verify verbatim LICENSE-MIT, LICENSE-APACHE, and NOTICE
@@ -372,8 +373,9 @@ precommit:  ## Run pre-commit hooks (format/lint/security + tests)
 	@echo "✅ Pre-commit checks passed"
 
 prepush: license-audit ## Run pre-push hooks (goneat assess + PR-scope public-surface scan when the catalog is set)
-	@if [ -z "$(GONEAT_BIN)" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi
-	@echo "Running pre-push validation..." && GOTOOLCHAIN=auto $(GONEAT_BIN) assess --categories format,lint,security,dependencies,dates,tools,maturity,repo-status --fail-on high --package-mode
+	@goneat="$${DOCPRESSER_GONEAT_BIN:-$(GONEAT_BIN)}"; \
+		if [ -z "$$goneat" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi; \
+		echo "Running pre-push validation..." && GOTOOLCHAIN=auto "$$goneat" assess --categories format,lint,security,dependencies,dates,tools,maturity,repo-status --fail-on high --package-mode
 	@DOCPRESSER_SURFACE_SCOPE=pr ./scripts/surface-scan.sh
 	@echo "✅ Pre-push checks passed"
 
