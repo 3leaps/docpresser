@@ -9,7 +9,7 @@
 - A case response whose `subject_version` differs from the handshake is recorded as `protocol_error` with `subject_version_mismatch`.
 - The Python driver runs only the engine requested and fails when it is unavailable: `pyyaml-safe` requires PyYAML, `pyyaml-csafe` requires PyYAML built with libyaml, and the built-in YAML 1.1 parser is selected explicitly with `--engine builtin-yaml11`. The undocumented `yamlprims` engine is removed.
 - The Go drivers report the module versions recorded in their build information, the Node driver reports both js-yaml and Node versions and fails its handshake when js-yaml is not installed, and the Rust driver pins `yamlprims` exactly.
-- The `yamlprims-go` and `yamlprims-rust` drivers use yamlprims v0.3.0; the Rust driver reports its exact pin, and a non-exact pin fails its build.
+- The `yamlprims-go` and `yamlprims-rust` drivers use yamlprims v0.3.0; the Rust driver reports the yamlprims version resolved in its Cargo.lock.
 - `make check` is the non-mutating CI gate; `make pr-final` adds a required public-surface scan of the tree, commits, pull-request text and branch name; `make prepush` and the pre-push hook run that scan when a catalog is configured.
 - CI scans pull requests, including forks, with the scanner's built-in baseline.
 - Containment scratch directories are named `docpresser-run-*`.
