@@ -14,6 +14,7 @@ import (
 	"math"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -68,12 +69,43 @@ type caseResponse struct {
 	HazardsFound   []string `json:"hazards_found,omitempty"`
 }
 
+// subjectVersion names both engines this driver runs: yamlprims for YAML and
+// JSON loading, canonprims for the JCS projection.
 func subjectVersion() string {
-	return "v0.2.1 (" + runtime.Version() + ")"
+	return "yamlprims " + moduleVersion("github.com/3leaps/yamlprims") +
+		", canonprims " + moduleVersion("github.com/3leaps/canonprims") +
+		" (" + runtime.Version() + ")"
+}
+
+// moduleVersion reports the version of mod linked into this binary, read from
+// the build information Go records, so it cannot drift from go.mod.
+func moduleVersion(mod string) string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	for _, dep := range info.Deps {
+		if dep.Path == mod {
+			if dep.Replace != nil {
+				return dep.Replace.Version + " (replaced)"
+			}
+			return dep.Version
+		}
+	}
+	return "unknown"
+}
+
+func hasArg(want string) bool {
+	for _, arg := range os.Args[1:] {
+		if arg == want {
+			return true
+		}
+	}
+	return false
 }
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "--docpresser-handshake" {
+	if hasArg("--docpresser-handshake") {
 		resp := handshakeResponse{
 			Version:        protocolVersion,
 			Subject:        "yamlprims-go",

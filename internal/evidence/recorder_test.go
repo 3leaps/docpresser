@@ -26,10 +26,14 @@ func TestRecorderEndToEndWithOracle(t *testing.T) {
 	runDir := filepath.Join(t.TempDir(), "run")
 	rec, err := NewRecorder(runDir, "run-001", "synthetic-workload", loaded.PackSHA256, []model.SubjectMetadata{
 		{
-			Name:         "yamlprims-go",
-			Role:         "target",
-			Version:      "v0.2.1",
-			DriverSHA256: strings.Repeat("c", 64),
+			Name:           "yamlprims-go",
+			Role:           "target",
+			SubjectVersion: "v0.2.1 (go1.26.10)",
+			Language:       "go",
+			Engine:         "yamlprims-go",
+			Formats:        []string{"yaml", "json"},
+			Operations:     []string{"load_value"},
+			DriverSHA256:   strings.Repeat("c", 64),
 		},
 	})
 	if err != nil {

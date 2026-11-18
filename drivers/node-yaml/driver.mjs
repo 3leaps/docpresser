@@ -3,8 +3,40 @@
 
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
 
 const PROTOCOL_VERSION = "docpresser-driver/v0";
+
+// jsYamlVersion reads the version of the js-yaml package this driver resolves,
+// or "unavailable" when it is not installed (YAML cases then report
+// missing_js_yaml).
+function jsYamlVersion() {
+	try {
+		const require = createRequire(import.meta.url);
+		let dir = path.dirname(require.resolve("js-yaml"));
+		for (;;) {
+			const candidate = path.join(dir, "package.json");
+			if (fs.existsSync(candidate)) {
+				const pkg = JSON.parse(fs.readFileSync(candidate, "utf8"));
+				if (pkg.name === "js-yaml" && typeof pkg.version === "string") {
+					return pkg.version;
+				}
+			}
+			const parent = path.dirname(dir);
+			if (parent === dir) {
+				return "unavailable";
+			}
+			dir = parent;
+		}
+	} catch {
+		return "unavailable";
+	}
+}
+
+function subjectVersion() {
+	return `js-yaml ${jsYamlVersion()} (node ${process.version})`;
+}
 
 function canonicalizeJCSValue(val) {
 	if (val === null || typeof val === "boolean") {
@@ -79,7 +111,7 @@ async function main() {
 		const resp = {
 			version: PROTOCOL_VERSION,
 			subject: "node-yaml",
-			subject_version: process.version,
+			subject_version: subjectVersion(),
 			language: "javascript",
 			engine: "node-js-yaml",
 			formats: ["yaml", "json", "jcs"],
@@ -109,7 +141,7 @@ async function main() {
 					version: PROTOCOL_VERSION,
 					case_id: caseId,
 					subject: "node-yaml",
-					subject_version: process.version,
+					subject_version: subjectVersion(),
 					status: "ok",
 					canonical_value: canonical,
 					output_sha256: digest,
@@ -123,7 +155,7 @@ async function main() {
 					version: PROTOCOL_VERSION,
 					case_id: caseId,
 					subject: "node-yaml",
-					subject_version: process.version,
+					subject_version: subjectVersion(),
 					status: "error",
 					error_phase: "syntax",
 					error_code: "jcs_error",
@@ -150,7 +182,7 @@ async function main() {
 				version: PROTOCOL_VERSION,
 				case_id: caseId,
 				subject: "node-yaml",
-				subject_version: process.version,
+				subject_version: subjectVersion(),
 				status: "ok",
 				canonical_value: canonical,
 				output_sha256: digest,
@@ -166,7 +198,7 @@ async function main() {
 					version: PROTOCOL_VERSION,
 					case_id: caseId,
 					subject: "node-yaml",
-					subject_version: process.version,
+					subject_version: subjectVersion(),
 					status: "unsupported",
 					error_phase: "driver",
 					error_code: "missing_js_yaml",
@@ -179,7 +211,7 @@ async function main() {
 				version: PROTOCOL_VERSION,
 				case_id: caseId,
 				subject: "node-yaml",
-				subject_version: process.version,
+				subject_version: subjectVersion(),
 				status: req.budgets ? "refused_bounded" : "error",
 				error_phase: "syntax",
 				error_code: "js_yaml_error",

@@ -1,10 +1,11 @@
 {
   "version": "docpresser/v0",
+  "docpresser_version": "specimen",
   "state": "complete",
   "run_id": "specimen-mutated-pack-sha256",
   "profile": "smoke",
   "pack_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-  "schema_sha256": "30c90f7592b99f37f968e35eb6bf90bcd469d0fe59f38b5af4e93009a1229adc",
+  "schema_sha256": "3162aa8b49055fafcdf84c3b8133af8899a844bc0684225cf572ff6b0d12f46a",
   "observations_sha256": "a3af442cfbe90d9d2c1f365c07348c74106e34a117742173a8a5b29d7633de4e",
   "observation_count": 1,
   "started_at": "2026-11-13T00:00:00Z",
@@ -20,7 +21,16 @@
     {
       "name": "yamlprims-go",
       "role": "target",
-      "version": "v0.2.1",
+      "subject_version": "v0.2.1 (go1.26.10)",
+      "language": "go",
+      "engine": "yamlprims-go",
+      "formats": [
+        "yaml",
+        "json"
+      ],
+      "operations": [
+        "load_value"
+      ],
       "driver_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     }
   ]

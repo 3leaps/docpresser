@@ -14,6 +14,7 @@ import (
 	"math"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -70,11 +71,38 @@ type caseResponse struct {
 }
 
 func subjectVersion() string {
-	return "v3.0.1 (" + runtime.Version() + ")"
+	return moduleVersion("gopkg.in/yaml.v3") + " (" + runtime.Version() + ")"
+}
+
+// moduleVersion reports the version of mod linked into this binary, read from
+// the build information Go records, so it cannot drift from go.mod.
+func moduleVersion(mod string) string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	for _, dep := range info.Deps {
+		if dep.Path == mod {
+			if dep.Replace != nil {
+				return dep.Replace.Version + " (replaced)"
+			}
+			return dep.Version
+		}
+	}
+	return "unknown"
+}
+
+func hasArg(want string) bool {
+	for _, arg := range os.Args[1:] {
+		if arg == want {
+			return true
+		}
+	}
+	return false
 }
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "--docpresser-handshake" {
+	if hasArg("--docpresser-handshake") {
 		resp := handshakeResponse{
 			Version:        protocolVersion,
 			Subject:        "go-yamlv3",

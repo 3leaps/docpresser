@@ -54,14 +54,28 @@ type Response struct {
 	HazardsFound   []string `json:"hazards_found,omitempty"`
 }
 
+// HandshakeFlag is the argument that asks a driver to describe itself.
+const HandshakeFlag = "--docpresser-handshake"
+
+// Handshake is the single JSON object a driver prints for HandshakeFlag.
+type Handshake struct {
+	Version        string   `json:"version"`
+	Subject        string   `json:"subject"`
+	SubjectVersion string   `json:"subject_version"`
+	Language       string   `json:"language"`
+	Engine         string   `json:"engine"`
+	Formats        []string `json:"formats"`
+	Operations     []string `json:"operations"`
+}
+
 // Client invokes an out-of-process subject driver under containment supervision.
 type Client struct {
 	Name         string
 	Role         string
-	Version      string
 	Command      string
 	Args         []string
 	DriverSHA256 string
+	handshake    *Handshake
 }
 
 // NewClient constructs a subject driver client from a specification string "name=command [args...]"
@@ -89,25 +103,122 @@ func NewClient(specStr, role string) (*Client, error) {
 	return &Client{
 		Name:         name,
 		Role:         role,
-		Version:      "v0.1.0",
 		Command:      cmdPath,
 		Args:         args,
 		DriverSHA256: driverDigest,
 	}, nil
 }
 
-// Metadata returns the SubjectMetadata for run-manifest.json.
-func (c *Client) Metadata() model.SubjectMetadata {
-	ver := c.Version
-	if ver == "" {
-		ver = "v0.1.0"
+// Handshake runs the driver once with HandshakeFlag (appended after its own
+// arguments) under containment and records the identity it reports. It fails on
+// any timeout, crash, oversized or malformed reply, wrong protocol version, or
+// empty identity field; there is no placeholder fallback.
+func (c *Client) Handshake(ctx context.Context) error {
+	args := append(append([]string{}, c.Args...), HandshakeFlag)
+	res, err := containment.Run(ctx, containment.Spec{
+		Command:        c.Command,
+		Args:           args,
+		Timeout:        handshakeTimeout,
+		MaxRSSBytes:    256 * 1024 * 1024,
+		MaxOutputBytes: 64 * 1024,
+	})
+	if err != nil {
+		return fmt.Errorf("subject %q handshake: %w", c.Name, err)
 	}
+	switch {
+	case res.TimedOut:
+		return fmt.Errorf("subject %q handshake timed out", c.Name)
+	case res.OOMKilled, res.Crashed:
+		detail := fmt.Sprintf("exit %d", res.ExitCode)
+		if res.Signal != "" {
+			detail += ", signal " + res.Signal
+		}
+		if msg := firstLine(res.Stderr); msg != "" {
+			detail += ": " + msg
+		}
+		return fmt.Errorf("subject %q handshake exited abnormally (%s)", c.Name, detail)
+	case res.OutputExceeded:
+		return fmt.Errorf("subject %q handshake output exceeded the limit", c.Name)
+	}
+	h, err := parseHandshake(res.Stdout)
+	if err != nil {
+		return fmt.Errorf("subject %q handshake: %w", c.Name, err)
+	}
+	c.handshake = h
+	return nil
+}
+
+var handshakeTimeout = 10 * time.Second
+
+// firstLine returns the first non-empty line of b, trimmed to 200 bytes, for
+// error messages.
+func firstLine(b []byte) string {
+	for _, line := range strings.Split(string(b), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			if len(line) > 200 {
+				line = line[:200]
+			}
+			return line
+		}
+	}
+	return ""
+}
+
+func parseHandshake(stdout []byte) (*Handshake, error) {
+	trimmed := bytes.TrimSpace(stdout)
+	if len(trimmed) == 0 {
+		return nil, fmt.Errorf("empty reply")
+	}
+	dec := json.NewDecoder(bytes.NewReader(trimmed))
+	dec.DisallowUnknownFields()
+	var h Handshake
+	if err := dec.Decode(&h); err != nil {
+		return nil, fmt.Errorf("malformed reply: %w", err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return nil, fmt.Errorf("trailing data after the reply")
+	}
+	if h.Version != ProtocolVersion {
+		return nil, fmt.Errorf("protocol version %q, want %q", h.Version, ProtocolVersion)
+	}
+	for field, v := range map[string]string{
+		"subject": h.Subject, "subject_version": h.SubjectVersion, "language": h.Language, "engine": h.Engine,
+	} {
+		if strings.TrimSpace(v) == "" {
+			return nil, fmt.Errorf("empty %s", field)
+		}
+	}
+	if len(h.Formats) == 0 || len(h.Operations) == 0 {
+		return nil, fmt.Errorf("formats and operations must be non-empty")
+	}
+	for _, list := range [][]string{h.Formats, h.Operations} {
+		for _, entry := range list {
+			if strings.TrimSpace(entry) == "" {
+				return nil, fmt.Errorf("formats and operations must not contain empty entries")
+			}
+		}
+	}
+	return &h, nil
+}
+
+// Metadata returns the SubjectMetadata for run-manifest.json. It requires a
+// completed Handshake.
+func (c *Client) Metadata() (model.SubjectMetadata, error) {
+	if c.handshake == nil {
+		return model.SubjectMetadata{}, fmt.Errorf("subject %q has no handshake", c.Name)
+	}
+	h := c.handshake
 	return model.SubjectMetadata{
-		Name:         c.Name,
-		Role:         c.Role,
-		Version:      ver,
-		DriverSHA256: c.DriverSHA256,
-	}
+		Name:           c.Name,
+		Role:           c.Role,
+		SubjectVersion: h.SubjectVersion,
+		Language:       h.Language,
+		Engine:         h.Engine,
+		Formats:        append([]string{}, h.Formats...),
+		Operations:     append([]string{}, h.Operations...),
+		DriverSHA256:   c.DriverSHA256,
+	}, nil
 }
 
 // ExecuteCase runs a single PackCase against the subject driver inside the containment supervisor.
@@ -214,8 +325,10 @@ func (c *Client) ExecuteCase(ctx context.Context, pc model.PackCase, inputBytes 
 		obs.ErrorCode = "invalid_envelope"
 		return obs, nil
 	}
-	if resp.SubjectVersion != "" {
-		c.Version = resp.SubjectVersion
+	if resp.SubjectVersion != "" && (c.handshake == nil || resp.SubjectVersion != c.handshake.SubjectVersion) {
+		obs.Status = "protocol_error"
+		obs.ErrorCode = "subject_version_mismatch"
+		return obs, nil
 	}
 
 	obs.Status = resp.Status

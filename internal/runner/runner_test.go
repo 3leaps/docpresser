@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/3leaps/docpresser/internal/model"
@@ -84,8 +86,38 @@ func TestRunnerAndOracle_FaultDriverEndToEnd(t *testing.T) {
 		t.Fatalf("WritePack failed: %v", err)
 	}
 
+	// A failed handshake stops the run before any evidence is written.
+	badRunDir := filepath.Join(t.TempDir(), "bad-handshake-run")
+	if _, err := Run(context.Background(), Options{
+		PackDir:      cleanPackDir,
+		Profile:      "diabolical-containment",
+		RunID:        "fault-bad-handshake",
+		SubjectSpecs: []string{"faultdriver=" + binPath + " --handshake=empty_version"},
+		OutDir:       badRunDir,
+	}); err == nil || !strings.Contains(err.Error(), "handshake") {
+		t.Fatalf("runner.Run with a failing handshake: err = %v, want a handshake error", err)
+	}
+	for _, mode := range []string{"empty_version", "blank_format", "null_operation"} {
+		dir := filepath.Join(t.TempDir(), "bad-"+mode)
+		if _, err := Run(context.Background(), Options{
+			PackDir:      cleanPackDir,
+			Profile:      "diabolical-containment",
+			RunID:        "fault-bad-" + mode,
+			SubjectSpecs: []string{"faultdriver=" + binPath + " --handshake=" + mode},
+			OutDir:       dir,
+		}); err == nil || !strings.Contains(err.Error(), "handshake") {
+			t.Fatalf("runner.Run with handshake mode %s: err = %v, want a handshake error", mode, err)
+		}
+		if _, statErr := os.Stat(dir); !os.IsNotExist(statErr) {
+			t.Fatalf("handshake mode %s left evidence at %s (stat err = %v)", mode, dir, statErr)
+		}
+	}
+	if _, statErr := os.Stat(filepath.Join(badRunDir, "run-manifest.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("a failed handshake must not leave a run-manifest.json (stat err = %v)", statErr)
+	}
+
 	cleanRunDir := filepath.Join(t.TempDir(), "clean-run")
-	_, err = Run(context.Background(), Options{
+	manifest, err := Run(context.Background(), Options{
 		PackDir:      cleanPackDir,
 		Profile:      "diabolical-containment",
 		RunID:        "fault-clean-run",
@@ -94,6 +126,20 @@ func TestRunnerAndOracle_FaultDriverEndToEnd(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("runner.Run failed: %v", err)
+	}
+	if manifest.DocpresserVersion == "" {
+		t.Fatal("run manifest does not record the docpresser version")
+	}
+	if len(manifest.Subjects) != 1 || manifest.Subjects[0].SubjectVersion != "faultdriver-1.0.0" ||
+		manifest.Subjects[0].Engine != "faultdriver" || manifest.Subjects[0].Language != "go" {
+		t.Fatalf("run manifest does not record the driver handshake: %+v", manifest.Subjects)
+	}
+	onDisk, err := os.ReadFile(filepath.Join(cleanRunDir, "run-manifest.json"))
+	if err != nil {
+		t.Fatalf("read run-manifest.json: %v", err)
+	}
+	if !strings.Contains(string(onDisk), `"subject_version": "faultdriver-1.0.0"`) {
+		t.Fatalf("run-manifest.json on disk lacks the handshake subject_version:\n%s", onDisk)
 	}
 
 	report, err := oracle.Verify(context.Background(), cleanRunDir, cleanPackDir)

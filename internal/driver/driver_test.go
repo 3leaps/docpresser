@@ -7,12 +7,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/3leaps/docpresser/internal/model"
 )
 
-func TestFaultDriverAllSixModes(t *testing.T) {
+func buildFaultDriver(t *testing.T) string {
+	t.Helper()
 	binPath := filepath.Join(t.TempDir(), "faultdriver")
 	if runtime.GOOS == "windows" {
 		binPath += ".exe"
@@ -21,15 +24,84 @@ func TestFaultDriverAllSixModes(t *testing.T) {
 	if out, err := buildCmd.CombinedOutput(); err != nil {
 		t.Fatalf("build faultdriver failed: %v\n%s", err, string(out))
 	}
+	return binPath
+}
+
+func TestHandshakeRecordsDriverIdentity(t *testing.T) {
+	binPath := buildFaultDriver(t)
+	client, err := NewClient("faultdriver="+binPath, "target")
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	if _, err := client.Metadata(); err == nil {
+		t.Fatal("Metadata succeeded before Handshake; a placeholder version must never be recorded")
+	}
+	if err := client.Handshake(context.Background()); err != nil {
+		t.Fatalf("Handshake failed: %v", err)
+	}
+	meta, err := client.Metadata()
+	if err != nil {
+		t.Fatalf("Metadata failed: %v", err)
+	}
+	if meta.SubjectVersion != "faultdriver-1.0.0" || meta.Language != "go" || meta.Engine != "faultdriver" ||
+		len(meta.Formats) != 1 || meta.Formats[0] != "yaml" || len(meta.Operations) != 1 || meta.Operations[0] != "load_value" {
+		t.Fatalf("Metadata did not record the handshake: %+v", meta)
+	}
+	if meta.Name != "faultdriver" || meta.Role != "target" || meta.DriverSHA256 != client.DriverSHA256 {
+		t.Fatalf("Metadata lost client identity: %+v", meta)
+	}
+}
+
+func TestHandshakeRejectsFaultyReplies(t *testing.T) {
+	binPath := buildFaultDriver(t)
+	old := handshakeTimeout
+	handshakeTimeout = 500 * time.Millisecond
+	t.Cleanup(func() { handshakeTimeout = old })
+	cases := map[string]string{
+		"silent":         "empty reply",
+		"bad_json":       "malformed reply",
+		"wrong_protocol": "protocol version",
+		"empty_version":  "empty subject_version",
+		"no_formats":     "formats and operations must be non-empty",
+		"blank_format":   "must not contain empty entries",
+		"null_operation": "must not contain empty entries",
+		"extra_field":    "malformed reply",
+		"trailing":       "trailing data",
+		"hang":           "timed out",
+		"crash":          "exited abnormally (exit 3: faultdriver: engine unavailable)",
+	}
+	for mode, want := range cases {
+		t.Run(mode, func(t *testing.T) {
+			client, err := NewClient("faultdriver="+binPath+" --handshake="+mode, "target")
+			if err != nil {
+				t.Fatalf("NewClient failed: %v", err)
+			}
+			err = client.Handshake(context.Background())
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("Handshake(%s) error = %v, want it to mention %q", mode, err, want)
+			}
+			if _, mErr := client.Metadata(); mErr == nil {
+				t.Fatalf("Metadata succeeded after a failed handshake (%s)", mode)
+			}
+		})
+	}
+}
+
+func TestFaultDriverAllSixModes(t *testing.T) {
+	binPath := buildFaultDriver(t)
 
 	client, err := NewClient("faultdriver="+binPath, "target")
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
+	if err := client.Handshake(context.Background()); err != nil {
+		t.Fatalf("Handshake failed: %v", err)
+	}
 
 	modes := []struct {
 		mode       string
 		wantStatus string
+		wantCode   string
 	}{
 		{mode: "clean_pass", wantStatus: "ok"},
 		{mode: "refused_bounded", wantStatus: "refused_bounded"},
@@ -37,6 +109,7 @@ func TestFaultDriverAllSixModes(t *testing.T) {
 		{mode: "memory_spike", wantStatus: "oom_killed"},
 		{mode: "infinite_hang", wantStatus: "timeout_exceeded"},
 		{mode: "truncated_json", wantStatus: "protocol_error"},
+		{mode: "version_mismatch", wantStatus: "protocol_error", wantCode: "subject_version_mismatch"},
 	}
 
 	for _, tc := range modes {
@@ -71,6 +144,9 @@ func TestFaultDriverAllSixModes(t *testing.T) {
 			}
 			if obs.Status != tc.wantStatus {
 				t.Fatalf("mode %s: Status = %q, want %q (obs=%+v)", tc.mode, obs.Status, tc.wantStatus, obs)
+			}
+			if tc.wantCode != "" && obs.ErrorCode != tc.wantCode {
+				t.Fatalf("mode %s: ErrorCode = %q, want %q", tc.mode, obs.ErrorCode, tc.wantCode)
 			}
 		})
 	}

@@ -269,6 +269,7 @@ func bootstrapCorpusV0(corpusRoot string) error {
 
 		manifest := model.RunManifest{
 			Version:            model.Version,
+			DocpresserVersion:  "specimen",
 			State:              "complete",
 			RunID:              "specimen-" + name,
 			Profile:            "smoke",
@@ -287,10 +288,14 @@ func bootstrapCorpusV0(corpusRoot string) error {
 			},
 			Subjects: []model.SubjectMetadata{
 				{
-					Name:         "yamlprims-go",
-					Role:         "target",
-					Version:      "v0.2.1",
-					DriverSHA256: strings.Repeat("b", 64),
+					Name:           "yamlprims-go",
+					Role:           "target",
+					SubjectVersion: "v0.2.1 (go1.26.10)",
+					Language:       "go",
+					Engine:         "yamlprims-go",
+					Formats:        []string{"yaml", "json"},
+					Operations:     []string{"load_value"},
+					DriverSHA256:   strings.Repeat("b", 64),
 				},
 			},
 		}

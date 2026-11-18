@@ -6,7 +6,7 @@
   "tier": "smoke",
   "corpus_commit": "b52fcd090d6879a0bd58ec5a5496c6a4de90504e",
   "corpus_profile": "yamlprims-core",
-  "schema_sha256": "30c90f7592b99f37f968e35eb6bf90bcd469d0fe59f38b5af4e93009a1229adc",
+  "schema_sha256": "3162aa8b49055fafcdf84c3b8133af8899a844bc0684225cf572ff6b0d12f46a",
   "case_count": 2,
   "total_input_bytes": 24,
   "files": [
