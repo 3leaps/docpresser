@@ -108,6 +108,10 @@ function toNotation(val) {
 async function main() {
 	const args = process.argv.slice(2);
 	if (args.includes("--docpresser-handshake")) {
+		if (jsYamlVersion() === "unavailable") {
+			process.stderr.write("node-yaml driver: js-yaml is not installed\n");
+			process.exit(2);
+		}
 		const resp = {
 			version: PROTOCOL_VERSION,
 			subject: "node-yaml",
