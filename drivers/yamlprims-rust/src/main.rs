@@ -72,7 +72,7 @@ fn main() {
         let resp = HandshakeResponse {
             version: PROTOCOL_VERSION,
             subject: "yamlprims-rust",
-            subject_version: "0.2.2",
+            subject_version: env!("YAMLPRIMS_PIN"),
             language: "rust",
             engine: "3leaps/yamlprims",
             formats: vec!["yaml", "json"],
@@ -97,7 +97,7 @@ fn main() {
             version: PROTOCOL_VERSION,
             case_id: req.case_id,
             subject: "yamlprims-rust",
-            subject_version: "0.2.2",
+            subject_version: env!("YAMLPRIMS_PIN"),
             status: "unsupported".to_string(),
             output_sha256: None,
             output_bytes: None,
@@ -139,7 +139,7 @@ fn execute_load_value(req: &CaseRequest, input: &[u8]) -> CaseResponse {
                 version: PROTOCOL_VERSION,
                 case_id: req.case_id.clone(),
                 subject: "yamlprims-rust",
-                subject_version: "0.2.2",
+                subject_version: env!("YAMLPRIMS_PIN"),
                 status: "ok".to_string(),
                 output_sha256: Some(digest),
                 output_bytes: Some(out_len),
@@ -211,8 +211,10 @@ fn notation(n: &Node) -> JsonValue {
             json!({"items": items, "t": "seq"})
         }
         Value::Mapping(m) => {
-            let entries: Vec<JsonValue> =
-                m.iter().map(|(k, v)| json!([notation(k), notation(v)])).collect();
+            let entries: Vec<JsonValue> = m
+                .iter()
+                .map(|(k, v)| json!([notation(k), notation(v)]))
+                .collect();
             json!({"entries": entries, "t": "map"})
         }
         Value::Tagged(t) => {
@@ -246,7 +248,7 @@ fn yaml_error_to_response(req: &CaseRequest, err: &Error) -> CaseResponse {
         version: PROTOCOL_VERSION,
         case_id: req.case_id.clone(),
         subject: "yamlprims-rust",
-        subject_version: "0.2.2",
+        subject_version: env!("YAMLPRIMS_PIN"),
         status: status.to_string(),
         output_sha256: None,
         output_bytes: None,

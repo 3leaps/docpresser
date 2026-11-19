@@ -6,6 +6,10 @@ rust-version = "1.88.0"
 license = "MIT OR Apache-2.0"
 publish = false
 
+# Its own workspace root, so the Cargo.lock beside this file is the active lock;
+# build.rs checks it against the exact yamlprims pin before reporting it.
+[workspace]
+
 [[bin]]
 name = "yamlprims-rust"
 path = "src/main.rs"
@@ -15,4 +19,7 @@ base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-yamlprims = "=0.2.2"
+yamlprims = "=0.3.0"
+
+[build-dependencies]
+toml = "=1.1.5"
