@@ -93,19 +93,7 @@ fn main() {
     };
 
     if !req.operation.is_empty() && req.operation != "load_value" {
-        let resp = CaseResponse {
-            version: PROTOCOL_VERSION,
-            case_id: req.case_id,
-            subject: "yamlprims-rust",
-            subject_version: env!("YAMLPRIMS_PIN"),
-            status: "unsupported".to_string(),
-            output_sha256: None,
-            output_bytes: None,
-            document_count: None,
-            canonical_value: None,
-            error_phase: Some("driver".to_string()),
-            error_code: Some("unsupported_operation".to_string()),
-        };
+        let resp = unsupported_response(req.case_id);
         println!("{}", serde_json::to_string(&resp).unwrap_or_default());
         return;
     }
@@ -224,6 +212,28 @@ fn notation(n: &Node) -> JsonValue {
     }
 }
 
+/// Error phases this driver reports; each must be allowed by
+/// `schemas/docpresser/v0/observation.schema.json`.
+const ERROR_PHASES: [&str; 5] = ["input", "syntax", "limit", "structure", "resolution"];
+
+/// Response for an operation this driver does not implement. Like the Go
+/// drivers, it reports no error phase.
+fn unsupported_response(case_id: String) -> CaseResponse {
+    CaseResponse {
+        version: PROTOCOL_VERSION,
+        case_id,
+        subject: "yamlprims-rust",
+        subject_version: env!("YAMLPRIMS_PIN"),
+        status: "unsupported".to_string(),
+        output_sha256: None,
+        output_bytes: None,
+        document_count: None,
+        canonical_value: None,
+        error_phase: None,
+        error_code: Some("unsupported_operation".to_string()),
+    }
+}
+
 fn yaml_error_to_response(req: &CaseRequest, err: &Error) -> CaseResponse {
     let phase = match &err.kind {
         ErrorKind::InvalidUtf8 { .. } => "input",
@@ -239,6 +249,7 @@ fn yaml_error_to_response(req: &CaseRequest, err: &Error) -> CaseResponse {
         | ErrorKind::MultipleDocuments => "structure",
         _ => "resolution",
     };
+    debug_assert!(ERROR_PHASES.contains(&phase));
     let status = if phase == "limit" || req.budgets.is_some() {
         "refused_bounded"
     } else {
@@ -256,5 +267,47 @@ fn yaml_error_to_response(req: &CaseRequest, err: &Error) -> CaseResponse {
         canonical_value: None,
         error_phase: Some(phase.to_string()),
         error_code: Some(err.kind.name().to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn schema_error_phases() -> Vec<String> {
+        let schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../schemas/docpresser/v0/observation.schema.json"
+        ))
+        .expect("observation schema parses");
+        schema["properties"]["error_phase"]["enum"]
+            .as_array()
+            .expect("error_phase enum")
+            .iter()
+            .map(|v| v.as_str().expect("enum value is a string").to_string())
+            .collect()
+    }
+
+    #[test]
+    fn unsupported_response_has_no_error_phase() {
+        let resp = unsupported_response("case".to_string());
+        let out: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&resp).unwrap()).unwrap();
+        assert_eq!(out["status"], "unsupported");
+        assert_eq!(out["error_code"], "unsupported_operation");
+        assert!(
+            out.get("error_phase").is_none(),
+            "unexpected error_phase: {out}"
+        );
+    }
+
+    #[test]
+    fn error_phases_are_allowed_by_observation_schema() {
+        let allowed = schema_error_phases();
+        for phase in ERROR_PHASES {
+            assert!(
+                allowed.iter().any(|a| a == phase),
+                "{phase} not in {allowed:?}"
+            );
+        }
     }
 }

@@ -135,7 +135,7 @@ func main() {
 		os.Exit(134)
 
 	case "memory_spike":
-		buf := make([]byte, 32*1024*1024)
+		buf := make([]byte, 96*1024*1024)
 		for i := 0; i < len(buf); i += 4096 {
 			buf[i] = byte(i)
 		}

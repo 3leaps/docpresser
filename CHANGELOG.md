@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- The `yamlprims-rust` driver no longer reports an `error_phase` for an unsupported operation, matching the Go drivers. Previously its `driver` phase failed observation schema validation and stopped the run. `make driver-yamlprims-rust` and CI now also run the driver's tests, which check its error phases against the observation schema.
+- On Linux, a driver's recorded peak memory is never lower than the memory docpresser held when it started the driver; `SECURITY.md` and the architecture document now say so. The fault-driver test's memory ceiling sits above the test process's own memory, so its non-memory cases no longer fail intermittently on Linux.
+
 ## [0.2.1] - 2026-11-20
 
 - The `yamlprims-rust` driver's `Cargo.lock` is committed, and the driver builds with `--locked` (`make driver-yamlprims-rust`). CI builds it on Linux and macOS with the minimum Rust version declared in its `Cargo.toml`.

@@ -136,9 +136,12 @@ func TestFaultDriverAllSixModes(t *testing.T) {
 				Expected: model.CaseExpectation{
 					Outcome: "refused_bounded",
 				},
+				// The ceiling sits well above the test process's own RSS: on
+				// Linux a child's peak RSS can include the parent's at exec.
+				// memory_spike allocates more than this ceiling.
 				Budgets: &model.CaseBudgets{
 					MaxWallMs:   wallMs,
-					MaxRSSBytes: 16 * 1024 * 1024,
+					MaxRSSBytes: 64 * 1024 * 1024,
 				},
 			}
 

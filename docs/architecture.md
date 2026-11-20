@@ -3,8 +3,9 @@
 Status: target design. Version 0.2.1 implements part of it: drivers run as
 separate processes with a wall-clock timeout, a temporary working directory, a
 scrubbed environment, and capped output; on Unix the process group is
-terminated on timeout and peak memory is measured after exit. Network
-isolation, enforced memory ceilings, read-only working directories, and
+terminated on timeout and peak memory is measured after exit (on Linux the
+reading is never lower than the coordinator's own memory at driver start).
+Network isolation, enforced memory ceilings, read-only working directories, and
 container execution described below are target design, not yet implemented.
 No benchmark result is claimed until verified execution evidence is recorded.
 
