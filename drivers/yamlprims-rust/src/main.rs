@@ -93,19 +93,7 @@ fn main() {
     };
 
     if !req.operation.is_empty() && req.operation != "load_value" {
-        let resp = CaseResponse {
-            version: PROTOCOL_VERSION,
-            case_id: req.case_id,
-            subject: "yamlprims-rust",
-            subject_version: env!("YAMLPRIMS_PIN"),
-            status: "unsupported".to_string(),
-            output_sha256: None,
-            output_bytes: None,
-            document_count: None,
-            canonical_value: None,
-            error_phase: Some("driver".to_string()),
-            error_code: Some("unsupported_operation".to_string()),
-        };
+        let resp = unsupported_response(req.case_id);
         println!("{}", serde_json::to_string(&resp).unwrap_or_default());
         return;
     }
@@ -224,6 +212,24 @@ fn notation(n: &Node) -> JsonValue {
     }
 }
 
+/// Response for an operation this driver does not implement. Like the Go
+/// drivers, it reports no error phase.
+fn unsupported_response(case_id: String) -> CaseResponse {
+    CaseResponse {
+        version: PROTOCOL_VERSION,
+        case_id,
+        subject: "yamlprims-rust",
+        subject_version: env!("YAMLPRIMS_PIN"),
+        status: "unsupported".to_string(),
+        output_sha256: None,
+        output_bytes: None,
+        document_count: None,
+        canonical_value: None,
+        error_phase: None,
+        error_code: Some("unsupported_operation".to_string()),
+    }
+}
+
 fn yaml_error_to_response(req: &CaseRequest, err: &Error) -> CaseResponse {
     let phase = match &err.kind {
         ErrorKind::InvalidUtf8 { .. } => "input",
@@ -256,5 +262,85 @@ fn yaml_error_to_response(req: &CaseRequest, err: &Error) -> CaseResponse {
         canonical_value: None,
         error_phase: Some(phase.to_string()),
         error_code: Some(err.kind.name().to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn schema_error_phases() -> Vec<String> {
+        let schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../schemas/docpresser/v0/observation.schema.json"
+        ))
+        .expect("observation schema parses");
+        schema["properties"]["error_phase"]["enum"]
+            .as_array()
+            .expect("error_phase enum")
+            .iter()
+            .map(|v| v.as_str().expect("enum value is a string").to_string())
+            .collect()
+    }
+
+    #[test]
+    fn unsupported_response_has_no_error_phase() {
+        let resp = unsupported_response("case".to_string());
+        let out: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&resp).unwrap()).unwrap();
+        assert_eq!(out["status"], "unsupported");
+        assert_eq!(out["error_code"], "unsupported_operation");
+        assert!(
+            out.get("error_phase").is_none(),
+            "unexpected error_phase: {out}"
+        );
+    }
+
+    fn run_case(profile: &str, input: &[u8]) -> JsonValue {
+        let req: CaseRequest = serde_json::from_value(json!({
+            "version": PROTOCOL_VERSION,
+            "case_id": "case",
+            "format": "yaml",
+            "operation": "load_value",
+            "profile": profile,
+            "input_base64": base64::engine::general_purpose::STANDARD.encode(input),
+        }))
+        .expect("case request");
+        let resp = execute_load_value(&req, input);
+        serde_json::from_str(&serde_json::to_string(&resp).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn load_errors_report_schema_allowed_phases() {
+        let allowed = schema_error_phases();
+        let deep = format!("{}{}", "[".repeat(5000), "]".repeat(5000));
+        let cases: [(&[u8], &str, &str); 6] = [
+            (b"\xff\xfe", "error", "input"),
+            (b"a: [", "error", "syntax"),
+            (b"a: 1\na: 2\n", "error", "structure"),
+            (b"*x\n", "error", "structure"),
+            (deep.as_bytes(), "refused_bounded", "limit"),
+            (b"!!int abc\n", "error", "resolution"),
+        ];
+        let oversized = vec![b'a'; 65537];
+        let cases: Vec<(&str, &[u8], &str, &str)> = cases
+            .iter()
+            .map(|&(input, status, phase)| ("", input, status, phase))
+            .chain([(
+                "yamlprims-core-limits",
+                oversized.as_slice(),
+                "error",
+                "input",
+            )])
+            .collect();
+        for (profile, input, status, phase) in cases {
+            let out = run_case(profile, input);
+            let label = String::from_utf8_lossy(&input[..input.len().min(16)]).into_owned();
+            assert_eq!(out["status"], status, "{label}: {out}");
+            assert_eq!(out["error_phase"], phase, "{label}: {out}");
+            assert!(
+                allowed.iter().any(|a| a == phase),
+                "{phase} not in {allowed:?}"
+            );
+        }
     }
 }

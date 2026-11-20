@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -95,6 +97,14 @@ func main() {
 	}
 	decoded, _ := base64.StdEncoding.DecodeString(req.InputBase64)
 	mode = strings.TrimSpace(string(decoded))
+	// "rss_spike:<bytes>" sets how much rss_spike allocates.
+	rssSpikeBytes := 96 * 1024 * 1024
+	if rest, ok := strings.CutPrefix(mode, "rss_spike:"); ok {
+		mode = "rss_spike"
+		if n, err := strconv.Atoi(rest); err == nil && n > 0 {
+			rssSpikeBytes = n
+		}
+	}
 	if idx := strings.LastIndex(req.CaseID, "."); idx >= 0 && mode == "" {
 		mode = req.CaseID[idx+1:]
 	}
@@ -135,12 +145,28 @@ func main() {
 		os.Exit(134)
 
 	case "memory_spike":
-		buf := make([]byte, 32*1024*1024)
+		// Reports out-of-memory on stderr without exceeding any RSS ceiling.
+		_, _ = fmt.Fprintf(os.Stderr, "fatal error: runtime: out of memory (allocated %d bytes)\n", 1<<20)
+		os.Exit(2)
+
+	case "rss_spike":
+		// Exceeds the RSS ceiling, then answers normally: only the measured
+		// peak RSS can classify it as oom_killed.
+		buf := make([]byte, rssSpikeBytes)
 		for i := 0; i < len(buf); i += 4096 {
 			buf[i] = byte(i)
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "fatal error: runtime: out of memory (allocated %d bytes)\n", len(buf))
-		os.Exit(2)
+		out := map[string]any{
+			"version":         "docpresser-driver/v0",
+			"case_id":         req.CaseID,
+			"subject":         "faultdriver",
+			"subject_version": subjectVersion,
+			"status":          "unsupported",
+			"error_code":      "unsupported_operation",
+		}
+		enc, _ := json.Marshal(out)
+		_, _ = fmt.Fprintf(os.Stdout, "%s\n", string(enc))
+		runtime.KeepAlive(buf)
 
 	case "infinite_hang":
 		time.Sleep(30 * time.Second)

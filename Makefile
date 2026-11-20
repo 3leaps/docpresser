@@ -343,8 +343,8 @@ test: verify-embedded-identity  ## Run all tests
 	@echo "Running test suite..."
 	$(GOTEST) ./... -v -cover
 
-driver-yamlprims-rust:  ## Build the Rust yamlprims driver from its committed Cargo.lock
-	cd drivers/yamlprims-rust && cargo build --release --locked
+driver-yamlprims-rust:  ## Build and test the Rust yamlprims driver from its committed Cargo.lock
+	cd drivers/yamlprims-rust && cargo build --release --locked && cargo test --release --locked
 
 lint:  ## Run lint checks with goneat
 	@if [ -z "$(GONEAT_BIN)" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi

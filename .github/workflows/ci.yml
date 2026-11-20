@@ -174,7 +174,7 @@ jobs:
           test -n "$msrv"
           rustup toolchain install "$msrv" --profile minimal
           echo "RUSTUP_TOOLCHAIN=$msrv" >> "$GITHUB_ENV"
-      - name: Build from the committed Cargo.lock
+      - name: Build and test from the committed Cargo.lock
         run: |
           set -euo pipefail
           cargo --version
