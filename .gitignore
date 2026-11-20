@@ -61,5 +61,4 @@ logs/
 __pycache__/
 *.pyc
 drivers/*/target/
-drivers/*/Cargo.lock
 drivers/*/node_modules/

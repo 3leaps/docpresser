@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The `yamlprims-rust` driver's `Cargo.lock` is committed, and the driver builds with `--locked` (`make driver-yamlprims-rust`). CI builds it on Linux and macOS with the minimum Rust version declared in its `Cargo.toml`.
+
 ## [0.2.0] - 2026-11-18
 
 - Breaking (user configuration): the optional user configuration file is now JSON, `~/.config/3leaps/docpresser.json`, holding one object whose only key is `run_root` (a string). An existing `docpresser.yaml` is reported as an error instead of being read, and `DOCPRESSER_CONFIG_PATH` files must be JSON. docpresser no longer uses a YAML parser of its own.
