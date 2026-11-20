@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -135,12 +136,28 @@ func main() {
 		os.Exit(134)
 
 	case "memory_spike":
+		// Reports out-of-memory on stderr without exceeding any RSS ceiling.
+		_, _ = fmt.Fprintf(os.Stderr, "fatal error: runtime: out of memory (allocated %d bytes)\n", 1<<20)
+		os.Exit(2)
+
+	case "rss_spike":
+		// Exceeds the RSS ceiling, then answers normally: only the measured
+		// peak RSS can classify it as oom_killed.
 		buf := make([]byte, 96*1024*1024)
 		for i := 0; i < len(buf); i += 4096 {
 			buf[i] = byte(i)
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "fatal error: runtime: out of memory (allocated %d bytes)\n", len(buf))
-		os.Exit(2)
+		out := map[string]any{
+			"version":         "docpresser-driver/v0",
+			"case_id":         req.CaseID,
+			"subject":         "faultdriver",
+			"subject_version": subjectVersion,
+			"status":          "unsupported",
+			"error_code":      "unsupported_operation",
+		}
+		enc, _ := json.Marshal(out)
+		_, _ = fmt.Fprintf(os.Stdout, "%s\n", string(enc))
+		runtime.KeepAlive(buf)
 
 	case "infinite_hang":
 		time.Sleep(30 * time.Second)

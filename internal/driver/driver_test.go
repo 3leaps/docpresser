@@ -111,6 +111,7 @@ func TestFaultDriverAllSixModes(t *testing.T) {
 		{mode: "refused_bounded", wantStatus: "refused_bounded"},
 		{mode: "crash_sigabrt", wantStatus: "crash_signal"},
 		{mode: "memory_spike", wantStatus: "oom_killed"},
+		{mode: "rss_spike", wantStatus: "oom_killed"},
 		{mode: "infinite_hang", wantStatus: "timeout_exceeded"},
 		{mode: "truncated_json", wantStatus: "protocol_error"},
 		{mode: "version_mismatch", wantStatus: "protocol_error", wantCode: "subject_version_mismatch"},
@@ -118,6 +119,9 @@ func TestFaultDriverAllSixModes(t *testing.T) {
 
 	for _, tc := range modes {
 		t.Run(tc.mode, func(t *testing.T) {
+			if tc.mode == "rss_spike" && runtime.GOOS == "windows" {
+				t.Skip("peak RSS is not recorded on Windows")
+			}
 			raw := []byte(tc.mode + "\n")
 			sum := sha256.Sum256(raw)
 			wallMs := int64(2000)
@@ -138,7 +142,8 @@ func TestFaultDriverAllSixModes(t *testing.T) {
 				},
 				// The ceiling sits well above the test process's own RSS: on
 				// Linux a child's peak RSS can include the parent's at exec.
-				// memory_spike allocates more than this ceiling.
+				// rss_spike allocates more than this ceiling; memory_spike
+				// only reports out-of-memory on stderr.
 				Budgets: &model.CaseBudgets{
 					MaxWallMs:   wallMs,
 					MaxRSSBytes: 64 * 1024 * 1024,
@@ -151,6 +156,12 @@ func TestFaultDriverAllSixModes(t *testing.T) {
 			}
 			if obs.Status != tc.wantStatus {
 				t.Fatalf("mode %s: Status = %q, want %q (obs=%+v)", tc.mode, obs.Status, tc.wantStatus, obs)
+			}
+			if tc.mode == "rss_spike" && obs.PeakRSSBytes <= pc.Budgets.MaxRSSBytes {
+				t.Fatalf("mode rss_spike: PeakRSSBytes = %d, want > %d", obs.PeakRSSBytes, pc.Budgets.MaxRSSBytes)
+			}
+			if tc.mode != "rss_spike" && tc.mode != "memory_spike" && obs.PeakRSSBytes > pc.Budgets.MaxRSSBytes {
+				t.Fatalf("mode %s: PeakRSSBytes = %d exceeds %d", tc.mode, obs.PeakRSSBytes, pc.Budgets.MaxRSSBytes)
 			}
 			if tc.wantCode != "" && obs.ErrorCode != tc.wantCode {
 				t.Fatalf("mode %s: ErrorCode = %q, want %q", tc.mode, obs.ErrorCode, tc.wantCode)

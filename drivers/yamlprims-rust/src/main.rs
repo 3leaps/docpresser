@@ -212,10 +212,6 @@ fn notation(n: &Node) -> JsonValue {
     }
 }
 
-/// Error phases this driver reports; each must be allowed by
-/// `schemas/docpresser/v0/observation.schema.json`.
-const ERROR_PHASES: [&str; 5] = ["input", "syntax", "limit", "structure", "resolution"];
-
 /// Response for an operation this driver does not implement. Like the Go
 /// drivers, it reports no error phase.
 fn unsupported_response(case_id: String) -> CaseResponse {
@@ -249,7 +245,6 @@ fn yaml_error_to_response(req: &CaseRequest, err: &Error) -> CaseResponse {
         | ErrorKind::MultipleDocuments => "structure",
         _ => "resolution",
     };
-    debug_assert!(ERROR_PHASES.contains(&phase));
     let status = if phase == "limit" || req.budgets.is_some() {
         "refused_bounded"
     } else {
@@ -300,10 +295,37 @@ mod tests {
         );
     }
 
+    fn run_case(profile: &str, input: &[u8]) -> JsonValue {
+        let req: CaseRequest = serde_json::from_value(json!({
+            "version": PROTOCOL_VERSION,
+            "case_id": "case",
+            "format": "yaml",
+            "operation": "load_value",
+            "profile": profile,
+            "input_base64": base64::engine::general_purpose::STANDARD.encode(input),
+        }))
+        .expect("case request");
+        let resp = execute_load_value(&req, input);
+        serde_json::from_str(&serde_json::to_string(&resp).unwrap()).unwrap()
+    }
+
     #[test]
-    fn error_phases_are_allowed_by_observation_schema() {
+    fn load_errors_report_schema_allowed_phases() {
         let allowed = schema_error_phases();
-        for phase in ERROR_PHASES {
+        let deep = format!("{}{}", "[".repeat(5000), "]".repeat(5000));
+        let cases: [(&[u8], &str, &str); 6] = [
+            (b"\xff\xfe", "error", "input"),
+            (b"a: [", "error", "syntax"),
+            (b"a: 1\na: 2\n", "error", "structure"),
+            (b"*x\n", "error", "structure"),
+            (deep.as_bytes(), "refused_bounded", "limit"),
+            (b"!!int abc\n", "error", "resolution"),
+        ];
+        for (input, status, phase) in cases {
+            let out = run_case("", input);
+            let label = String::from_utf8_lossy(&input[..input.len().min(16)]).into_owned();
+            assert_eq!(out["status"], status, "{label}: {out}");
+            assert_eq!(out["error_phase"], phase, "{label}: {out}");
             assert!(
                 allowed.iter().any(|a| a == phase),
                 "{phase} not in {allowed:?}"
