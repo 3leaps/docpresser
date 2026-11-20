@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -96,6 +97,14 @@ func main() {
 	}
 	decoded, _ := base64.StdEncoding.DecodeString(req.InputBase64)
 	mode = strings.TrimSpace(string(decoded))
+	// "rss_spike:<bytes>" sets how much rss_spike allocates.
+	rssSpikeBytes := 96 * 1024 * 1024
+	if rest, ok := strings.CutPrefix(mode, "rss_spike:"); ok {
+		mode = "rss_spike"
+		if n, err := strconv.Atoi(rest); err == nil && n > 0 {
+			rssSpikeBytes = n
+		}
+	}
 	if idx := strings.LastIndex(req.CaseID, "."); idx >= 0 && mode == "" {
 		mode = req.CaseID[idx+1:]
 	}
@@ -143,7 +152,7 @@ func main() {
 	case "rss_spike":
 		// Exceeds the RSS ceiling, then answers normally: only the measured
 		// peak RSS can classify it as oom_killed.
-		buf := make([]byte, 96*1024*1024)
+		buf := make([]byte, rssSpikeBytes)
 		for i := 0; i < len(buf); i += 4096 {
 			buf[i] = byte(i)
 		}

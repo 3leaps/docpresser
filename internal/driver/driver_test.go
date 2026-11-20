@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -59,7 +60,9 @@ func TestHandshakeRecordsDriverIdentity(t *testing.T) {
 func TestHandshakeRejectsFaultyReplies(t *testing.T) {
 	binPath := buildFaultDriver(t)
 	old := handshakeTimeout
-	handshakeTimeout = 500 * time.Millisecond
+	// Long enough for a loaded host to start the driver; only "hang" needs
+	// it to expire.
+	handshakeTimeout = 5 * time.Second
 	t.Cleanup(func() { handshakeTimeout = old })
 	cases := map[string]string{
 		"silent":         "empty reply",
@@ -117,12 +120,26 @@ func TestFaultDriverAllSixModes(t *testing.T) {
 		{mode: "version_mismatch", wantStatus: "protocol_error", wantCode: "subject_version_mismatch"},
 	}
 
+	// The memory ceiling must sit above this test process's own memory: on
+	// Linux a child's peak RSS can include the parent's at exec. MemStats.Sys
+	// never decreases, so it bounds the process's Go memory so far; the
+	// margin covers the binary and non-Go memory.
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	maxRSS := int64(64 * 1024 * 1024)
+	if c := int64(ms.Sys) + 64*1024*1024; c > maxRSS {
+		maxRSS = c
+	}
+
 	for _, tc := range modes {
 		t.Run(tc.mode, func(t *testing.T) {
 			if tc.mode == "rss_spike" && runtime.GOOS == "windows" {
 				t.Skip("peak RSS is not recorded on Windows")
 			}
 			raw := []byte(tc.mode + "\n")
+			if tc.mode == "rss_spike" {
+				raw = []byte(fmt.Sprintf("rss_spike:%d\n", maxRSS+32*1024*1024))
+			}
 			sum := sha256.Sum256(raw)
 			wallMs := int64(2000)
 			if tc.mode == "infinite_hang" {
@@ -140,13 +157,11 @@ func TestFaultDriverAllSixModes(t *testing.T) {
 				Expected: model.CaseExpectation{
 					Outcome: "refused_bounded",
 				},
-				// The ceiling sits well above the test process's own RSS: on
-				// Linux a child's peak RSS can include the parent's at exec.
 				// rss_spike allocates more than this ceiling; memory_spike
 				// only reports out-of-memory on stderr.
 				Budgets: &model.CaseBudgets{
 					MaxWallMs:   wallMs,
-					MaxRSSBytes: 64 * 1024 * 1024,
+					MaxRSSBytes: maxRSS,
 				},
 			}
 

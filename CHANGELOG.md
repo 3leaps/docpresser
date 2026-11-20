@@ -5,7 +5,7 @@
 ## [0.2.2] - 2026-11-20
 
 - The `yamlprims-rust` driver no longer reports an `error_phase` for an unsupported operation, matching the Go drivers. Previously its `driver` phase failed observation schema validation and stopped the run. `make driver-yamlprims-rust` and CI now also run the driver's tests, which check its error phases against the observation schema.
-- On Linux, a driver's recorded peak memory is never lower than the memory docpresser held when it started the driver; `SECURITY.md` and the architecture document now say so. The fault-driver test's memory ceiling sits above the test process's own memory, so its non-memory cases no longer fail intermittently on Linux.
+- On Linux, a driver's recorded peak memory is never lower than the memory docpresser held when it started the driver; `SECURITY.md` and the architecture document now say so. The fault-driver test sets its memory ceiling from the test process's own memory, tests out-of-memory detection by measured memory and by stderr separately, and allows a loaded host more time to start drivers in the handshake test.
 
 ## [0.2.1] - 2026-11-20
 

@@ -321,8 +321,19 @@ mod tests {
             (deep.as_bytes(), "refused_bounded", "limit"),
             (b"!!int abc\n", "error", "resolution"),
         ];
-        for (input, status, phase) in cases {
-            let out = run_case("", input);
+        let oversized = vec![b'a'; 65537];
+        let cases: Vec<(&str, &[u8], &str, &str)> = cases
+            .iter()
+            .map(|&(input, status, phase)| ("", input, status, phase))
+            .chain([(
+                "yamlprims-core-limits",
+                oversized.as_slice(),
+                "error",
+                "input",
+            )])
+            .collect();
+        for (profile, input, status, phase) in cases {
+            let out = run_case(profile, input);
             let label = String::from_utf8_lossy(&input[..input.len().min(16)]).into_owned();
             assert_eq!(out["status"], status, "{label}: {out}");
             assert_eq!(out["error_phase"], phase, "{label}: {out}");
