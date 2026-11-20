@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-20
+
+- The `yamlprims-rust` driver's `Cargo.lock` is committed, and the driver builds with `--locked` (`make driver-yamlprims-rust`). CI builds it on Linux and macOS with the minimum Rust version declared in its `Cargo.toml`.
+
 ## [0.2.0] - 2026-11-18
 
 - Breaking (user configuration): the optional user configuration file is now JSON, `~/.config/3leaps/docpresser.json`, holding one object whose only key is `run_root` (a string). An existing `docpresser.yaml` is reported as an error instead of being read, and `DOCPRESSER_CONFIG_PATH` files must be JSON. docpresser no longer uses a YAML parser of its own.
@@ -22,6 +26,7 @@
 - Add out-of-process containment supervision, line-delimited JSON driver execution, and schema-validated NDJSON evidence recording.
 - Add the independent four-axis verifier (`correctness`, `containment`, `migration_divergence`, `telemetry`), summary reporting, and Wave 1 YAML/JSON subject drivers.
 
-[Unreleased]: https://github.com/3leaps/docpresser/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/3leaps/docpresser/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/3leaps/docpresser/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/3leaps/docpresser/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/3leaps/docpresser/releases/tag/v0.1.0

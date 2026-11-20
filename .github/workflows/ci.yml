@@ -152,3 +152,35 @@ jobs:
         run: |
           go build -trimpath -buildvcs=false \
             -o "$RUNNER_TEMP/docpresser" ./cmd/docpresser
+  rust-driver:
+    name: Rust driver build (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, macos-15]
+    steps:
+      - name: Checkout
+        # yamllint disable-line rule:line-length
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the driver's minimum Rust version
+        run: |
+          set -euo pipefail
+          manifest=drivers/yamlprims-rust/Cargo.toml
+          msrv="$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' "$manifest")"
+          test -n "$msrv"
+          rustup toolchain install "$msrv" --profile minimal
+          echo "RUSTUP_TOOLCHAIN=$msrv" >> "$GITHUB_ENV"
+      - name: Build from the committed Cargo.lock
+        run: |
+          set -euo pipefail
+          cargo --version
+          make driver-yamlprims-rust
+          git diff --exit-code -- drivers/yamlprims-rust/Cargo.lock
+      - name: Driver handshake
+        run: |
+          bin=drivers/yamlprims-rust/target/release/yamlprims-rust
+          "$bin" --docpresser-handshake
