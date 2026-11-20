@@ -6,6 +6,6 @@ app:
   env_prefix: DOCPRESSER_
   config_name: docpresser
   description: "Qualification and synthetic-workload harness for structured documents (YAML, JSON/I-JSON/JCS, XML, XHTML, SVG; OOXML and PDF in later profiles)."
-  version: "0.2.0"
+  version: "0.2.1"
 metadata:
   repository_category: cli
