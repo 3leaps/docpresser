@@ -165,6 +165,24 @@ async function main() {
 	const inputBuf = Buffer.from(req.input_base64 || "", "base64");
 	const text = inputBuf.toString("utf8");
 
+	if (
+		req.operation &&
+		req.operation !== "load_value" &&
+		req.operation !== "project_jcs"
+	) {
+		process.stdout.write(
+			JSON.stringify({
+				version: PROTOCOL_VERSION,
+				case_id: caseId,
+				subject: "node-yaml",
+				subject_version: subjectVersion(),
+				status: "unsupported",
+				error_code: "unsupported_operation",
+			}) + "\n",
+		);
+		return;
+	}
+
 	if (req.operation === "project_jcs") {
 		try {
 			const parsed = JSON.parse(text);
@@ -211,7 +229,6 @@ async function main() {
 				subject: "node-yaml",
 				subject_version: subjectVersion(),
 				status: "unsupported",
-				error_phase: "driver",
 				error_code: "missing_js_yaml",
 			}) + "\n",
 		);
@@ -251,7 +268,6 @@ async function main() {
 					subject: "node-yaml",
 					subject_version: subjectVersion(),
 					status: "unsupported",
-					error_phase: "driver",
 					error_code: "missing_js_yaml",
 				}) + "\n",
 			);

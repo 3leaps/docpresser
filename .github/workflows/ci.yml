@@ -60,6 +60,8 @@ jobs:
           - runner: ubuntu-latest
             goos: linux
             goarch: amd64
+            # Every subject-driver toolchain is installed on this runner.
+            require_driver_toolchains: "1"
           - runner: macos-15
             goos: darwin
             goarch: arm64
@@ -71,6 +73,8 @@ jobs:
         shell: bash
     env:
       GOTOOLCHAIN: local
+      # yamllint disable-line rule:line-length
+      DOCPRESSER_REQUIRE_DRIVER_TOOLCHAINS: ${{ matrix.require_driver_toolchains }}
     steps:
       - name: Checkout
         # yamllint disable-line rule:line-length
@@ -94,6 +98,11 @@ jobs:
           go version
       - name: Download modules
         run: go mod download
+      - name: Install the node-yaml driver's js-yaml
+        if: matrix.require_driver_toolchains == '1'
+        working-directory: drivers/node-yaml
+        run: >-
+          npm install --no-save --no-package-lock --ignore-scripts js-yaml@4.1.0
       - name: Run native tests
         run: go test -v ./...
       - name: Build native CLI
