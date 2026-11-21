@@ -38,13 +38,28 @@ func setupUnavailable(t *testing.T, format string, args ...any) {
 	t.Skipf(format, args...)
 }
 
+// toolOrSkip checks that name is on PATH and returns the bare name, which the
+// driver client resolves through PATH. The resolved path may contain spaces
+// (for example under C:\Program Files), which a subject specification cannot
+// carry.
 func toolOrSkip(t *testing.T, name string) string {
 	t.Helper()
-	path, err := exec.LookPath(name)
-	if err != nil {
+	if _, err := exec.LookPath(name); err != nil {
 		setupUnavailable(t, "%s not found: %v", name, err)
 	}
-	return path
+	return name
+}
+
+// specOf joins a subject specification. NewClient splits the command on
+// whitespace, so a field containing whitespace cannot be expressed.
+func specOf(t *testing.T, name string, fields ...string) string {
+	t.Helper()
+	for _, f := range fields {
+		if strings.ContainsAny(f, " \t\r\n") {
+			setupUnavailable(t, "%s: path %q contains whitespace, which a subject specification cannot carry", name, f)
+		}
+	}
+	return name + "=" + strings.Join(fields, " ")
 }
 
 func buildGoDriver(dir string) func(t *testing.T, root string) string {
@@ -59,7 +74,7 @@ func buildGoDriver(dir string) func(t *testing.T, root string) string {
 		if out, err := cmd.CombinedOutput(); err != nil {
 			setupUnavailable(t, "build %s: %v\n%s", dir, err, out)
 		}
-		return dir + "=" + bin
+		return specOf(t, dir, bin)
 	}
 }
 
@@ -98,7 +113,7 @@ func buildRustDriver(t *testing.T, root string) string {
 	if bin == "" {
 		t.Fatalf("cargo reported no yamlprims-rust executable")
 	}
-	return "yamlprims-rust=" + bin
+	return specOf(t, "yamlprims-rust", bin)
 }
 
 func subjectDrivers() []subjectDriver {
@@ -107,11 +122,11 @@ func subjectDrivers() []subjectDriver {
 		{name: "yamlprims-go", spec: buildGoDriver("yamlprims-go")},
 		{name: "yamlprims-rust", spec: buildRustDriver},
 		{name: "python-yaml", spec: func(t *testing.T, root string) string {
-			return "python-yaml=" + toolOrSkip(t, "python3") + " " +
-				filepath.Join(root, "drivers", "python-yaml", "driver.py") + " --engine builtin-yaml11"
+			return specOf(t, "python-yaml", toolOrSkip(t, "python3"),
+				filepath.Join(root, "drivers", "python-yaml", "driver.py"), "--engine", "builtin-yaml11")
 		}},
 		{name: "node-yaml", spec: func(t *testing.T, root string) string {
-			return "node-yaml=" + toolOrSkip(t, "node") + " " + filepath.Join(root, "drivers", "node-yaml", "driver.mjs")
+			return specOf(t, "node-yaml", toolOrSkip(t, "node"), filepath.Join(root, "drivers", "node-yaml", "driver.mjs"))
 		}},
 	}
 }
@@ -187,7 +202,7 @@ func TestSubjectDriversAnswerUnsupportedOperations(t *testing.T) {
 // TestUnsupportedCheckRejectsInvalidPhases shows the check above fails for
 // replies that would stop docpresser run, including an upper-case key.
 func TestUnsupportedCheckRejectsInvalidPhases(t *testing.T) {
-	spec := "faultdriver=" + buildFaultDriver(t)
+	spec := specOf(t, "faultdriver", buildFaultDriver(t))
 	for _, mode := range []string{"unsupported_driver_phase", "unsupported_upper_phase"} {
 		t.Run(mode, func(t *testing.T) {
 			err := checkUnsupported(t, spec, mode)
