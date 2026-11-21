@@ -127,6 +127,25 @@ func main() {
 		enc, _ := json.Marshal(out)
 		_, _ = fmt.Fprintf(os.Stdout, "%s\n", string(enc))
 
+	case "unsupported_upper_phase", "unsupported_driver_phase":
+		// Unsupported replies whose phase the observation schema rejects; the
+		// first spells the key in upper case.
+		key := "error_phase"
+		if mode == "unsupported_upper_phase" {
+			key = "ERROR_PHASE"
+		}
+		out := map[string]any{
+			"version":         "docpresser-driver/v0",
+			"case_id":         req.CaseID,
+			"subject":         "faultdriver",
+			"subject_version": subjectVersion,
+			"status":          "unsupported",
+			"error_code":      "unsupported_operation",
+			key:               "driver",
+		}
+		enc, _ := json.Marshal(out)
+		_, _ = fmt.Fprintf(os.Stdout, "%s\n", string(enc))
+
 	case "refused_bounded":
 		out := map[string]any{
 			"version":         "docpresser-driver/v0",

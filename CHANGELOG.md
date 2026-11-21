@@ -6,7 +6,7 @@
 
 - The `go-yamlv3`, `yamlprims-go`, `python-yaml` and `node-yaml` drivers no longer report an `error_phase` for an unsupported operation. That phase failed observation schema validation and stopped the run. 0.2.2 fixed only the `yamlprims-rust` driver, and its note that the Go drivers already omitted the phase was incorrect.
 - The `node-yaml` driver answers `unsupported` for operations other than `load_value` and `project_jcs` instead of loading the input.
-- A test sends every subject driver an unsupported operation and checks its reply against the observation schema. The Linux CI job requires every driver toolchain for it.
+- A test sends every subject driver an unsupported operation through the same client path as `docpresser run` and validates the resulting observation against the observation schema. The Linux CI job installs `js-yaml` 4.1.0 for the `node-yaml` driver and requires every driver toolchain for this test.
 
 ## [0.2.2] - 2026-11-20
 

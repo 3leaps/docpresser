@@ -1,27 +1,41 @@
 package driver
 
 import (
+	"bufio"
 	"bytes"
-	"encoding/base64"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
-	"time"
 
+	"github.com/3leaps/docpresser/internal/model"
 	v0 "github.com/3leaps/docpresser/schemas/docpresser/v0"
 )
 
-// requireDriverToolchains turns a missing toolchain or a failed driver build
-// into a test failure instead of a skip. CI sets it where every toolchain is
-// installed.
+// requireDriverToolchains turns a missing toolchain, engine or failed driver
+// build into a test failure instead of a skip. CI sets it where every
+// toolchain is installed.
 const requireDriverToolchains = "DOCPRESSER_REQUIRE_DRIVER_TOOLCHAINS"
 
 type subjectDriver struct {
-	name    string
-	command func(t *testing.T, root string) []string
+	name string
+	// spec returns the NewClient specification (<name>=<command> [args]).
+	spec func(t *testing.T, root string) string
+}
+
+func setupUnavailable(t *testing.T, format string, args ...any) {
+	t.Helper()
+	if os.Getenv(requireDriverToolchains) == "1" {
+		t.Fatalf(format, args...)
+	}
+	t.Skipf(format, args...)
 }
 
 func toolOrSkip(t *testing.T, name string) string {
@@ -33,16 +47,8 @@ func toolOrSkip(t *testing.T, name string) string {
 	return path
 }
 
-func setupUnavailable(t *testing.T, format string, args ...any) {
-	t.Helper()
-	if os.Getenv(requireDriverToolchains) == "1" {
-		t.Fatalf(format, args...)
-	}
-	t.Skipf(format, args...)
-}
-
-func buildGoDriver(dir string) func(t *testing.T, root string) []string {
-	return func(t *testing.T, root string) []string {
+func buildGoDriver(dir string) func(t *testing.T, root string) string {
+	return func(t *testing.T, root string) string {
 		t.Helper()
 		bin := filepath.Join(t.TempDir(), dir)
 		if runtime.GOOS == "windows" {
@@ -53,123 +59,140 @@ func buildGoDriver(dir string) func(t *testing.T, root string) []string {
 		if out, err := cmd.CombinedOutput(); err != nil {
 			setupUnavailable(t, "build %s: %v\n%s", dir, err, out)
 		}
-		return []string{bin}
+		return dir + "=" + bin
 	}
+}
+
+// buildRustDriver builds the yamlprims-rust driver and returns the
+// executable Cargo reports for it, wherever the target directory or target
+// triple places it.
+func buildRustDriver(t *testing.T, root string) string {
+	t.Helper()
+	cargo := toolOrSkip(t, "cargo")
+	cmd := exec.Command(cargo, "build", "--release", "--locked", "--message-format=json-render-diagnostics")
+	cmd.Dir = filepath.Join(root, "drivers", "yamlprims-rust")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		setupUnavailable(t, "build yamlprims-rust: %v\n%s", err, stderr.String())
+	}
+	var bin string
+	scanner := bufio.NewScanner(&stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	for scanner.Scan() {
+		var msg struct {
+			Reason     string  `json:"reason"`
+			Executable *string `json:"executable"`
+			Target     struct {
+				Name string `json:"name"`
+			} `json:"target"`
+		}
+		if json.Unmarshal(scanner.Bytes(), &msg) != nil {
+			continue
+		}
+		if msg.Reason == "compiler-artifact" && msg.Target.Name == "yamlprims-rust" && msg.Executable != nil {
+			bin = *msg.Executable
+		}
+	}
+	if bin == "" {
+		t.Fatalf("cargo reported no yamlprims-rust executable")
+	}
+	return "yamlprims-rust=" + bin
 }
 
 func subjectDrivers() []subjectDriver {
 	return []subjectDriver{
-		{name: "go-yamlv3", command: buildGoDriver("go-yamlv3")},
-		{name: "yamlprims-go", command: buildGoDriver("yamlprims-go")},
-		{name: "yamlprims-rust", command: func(t *testing.T, root string) []string {
-			cargo := toolOrSkip(t, "cargo")
-			dir := filepath.Join(root, "drivers", "yamlprims-rust")
-			cmd := exec.Command(cargo, "build", "--release", "--locked")
-			cmd.Dir = dir
-			if out, err := cmd.CombinedOutput(); err != nil {
-				setupUnavailable(t, "build yamlprims-rust: %v\n%s", err, out)
-			}
-			bin := filepath.Join(dir, "target", "release", "yamlprims-rust")
-			if runtime.GOOS == "windows" {
-				bin += ".exe"
-			}
-			return []string{bin}
+		{name: "go-yamlv3", spec: buildGoDriver("go-yamlv3")},
+		{name: "yamlprims-go", spec: buildGoDriver("yamlprims-go")},
+		{name: "yamlprims-rust", spec: buildRustDriver},
+		{name: "python-yaml", spec: func(t *testing.T, root string) string {
+			return "python-yaml=" + toolOrSkip(t, "python3") + " " +
+				filepath.Join(root, "drivers", "python-yaml", "driver.py") + " --engine builtin-yaml11"
 		}},
-		{name: "python-yaml", command: func(t *testing.T, root string) []string {
-			return []string{toolOrSkip(t, "python3"), filepath.Join(root, "drivers", "python-yaml", "driver.py"), "--engine", "builtin-yaml11"}
-		}},
-		{name: "node-yaml", command: func(t *testing.T, root string) []string {
-			return []string{toolOrSkip(t, "node"), filepath.Join(root, "drivers", "node-yaml", "driver.mjs")}
+		{name: "node-yaml", spec: func(t *testing.T, root string) string {
+			return "node-yaml=" + toolOrSkip(t, "node") + " " + filepath.Join(root, "drivers", "node-yaml", "driver.mjs")
 		}},
 	}
 }
 
-func observationErrorPhases(t *testing.T) map[string]bool {
+func unsupportedCase(mode string) (model.PackCase, []byte) {
+	raw := []byte(mode + "\n")
+	sum := sha256.Sum256(raw)
+	return model.PackCase{
+		CaseID:      "unsupported." + mode,
+		Format:      "yaml",
+		Axis:        "correctness",
+		Profile:     "yaml-core",
+		Operation:   "extract_text",
+		InputPath:   "inputs/yaml/unsupported.yaml",
+		InputSHA256: hex.EncodeToString(sum[:]),
+		InputBytes:  int64(len(raw)),
+		Expected:    model.CaseExpectation{Outcome: "unsupported"},
+	}, raw
+}
+
+// checkUnsupported runs one unsupported operation through the same client
+// path as docpresser run and validates the resulting observation against the
+// observation schema, as the recorder does.
+func checkUnsupported(t *testing.T, spec string, input string) error {
 	t.Helper()
-	raw, err := v0.Schema("observation.schema.json")
+	client, err := NewClient(spec, "target")
 	if err != nil {
-		t.Fatalf("load observation schema: %v", err)
+		return fmt.Errorf("NewClient: %w", err)
 	}
-	var schema struct {
-		Properties struct {
-			ErrorPhase struct {
-				Enum []string `json:"enum"`
-			} `json:"error_phase"`
-		} `json:"properties"`
+	if err := client.Handshake(context.Background()); err != nil {
+		return fmt.Errorf("handshake: %w", err)
 	}
-	if err := json.Unmarshal(raw, &schema); err != nil {
-		t.Fatalf("parse observation schema: %v", err)
+	pc, raw := unsupportedCase(input)
+	obs, err := client.ExecuteCase(context.Background(), pc, raw)
+	if err != nil {
+		return fmt.Errorf("ExecuteCase: %w", err)
 	}
-	if len(schema.Properties.ErrorPhase.Enum) == 0 {
-		t.Fatal("observation schema has no error_phase enum")
+	if obs.Status != "unsupported" || obs.ErrorCode != "unsupported_operation" {
+		return fmt.Errorf("status %q code %q, want unsupported/unsupported_operation", obs.Status, obs.ErrorCode)
 	}
-	allowed := map[string]bool{}
-	for _, p := range schema.Properties.ErrorPhase.Enum {
-		allowed[p] = true
+	data, err := json.Marshal(obs)
+	if err != nil {
+		return fmt.Errorf("marshal observation: %w", err)
 	}
-	return allowed
+	if err := v0.ValidateObservationBytes(data); err != nil {
+		return fmt.Errorf("observation rejected: %w", err)
+	}
+	return nil
 }
 
 // TestSubjectDriversAnswerUnsupportedOperations sends every in-repository
 // subject driver an operation it does not implement. Each must answer
-// "unsupported", and any error_phase it reports must be one the observation
-// schema allows; otherwise docpresser run rejects the observation and stops.
+// "unsupported" with an observation the schema accepts; otherwise docpresser
+// run rejects the observation and stops.
 func TestSubjectDriversAnswerUnsupportedOperations(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowed := observationErrorPhases(t)
-	input := []byte("a: 1\n")
-	req, err := json.Marshal(Request{
-		Version:     ProtocolVersion,
-		CaseID:      "unsupported.extract_text",
-		Format:      "yaml",
-		Operation:   "extract_text",
-		InputBase64: base64.StdEncoding.EncodeToString(input),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	req = append(req, '\n')
-
 	for _, d := range subjectDrivers() {
 		t.Run(d.name, func(t *testing.T) {
-			argv := d.command(t, root)
-			cmd := exec.Command(argv[0], argv[1:]...)
-			cmd.Stdin = bytes.NewReader(req)
-			var stdout, stderr bytes.Buffer
-			cmd.Stdout = &stdout
-			cmd.Stderr = &stderr
-			done := make(chan error, 1)
-			if err := cmd.Start(); err != nil {
-				t.Fatalf("start %s: %v", d.name, err)
-			}
-			go func() { done <- cmd.Wait() }()
-			select {
-			case err := <-done:
-				if err != nil {
-					t.Fatalf("%s exited with %v; stderr: %s", d.name, err, stderr.String())
+			spec := d.spec(t, root)
+			if err := checkUnsupported(t, spec, "a: 1"); err != nil {
+				if strings.HasPrefix(err.Error(), "handshake:") && strings.Contains(err.Error(), "js-yaml") {
+					setupUnavailable(t, "%s: %v", d.name, err)
 				}
-			case <-time.After(60 * time.Second):
-				_ = cmd.Process.Kill()
-				t.Fatalf("%s did not answer within 60s", d.name)
+				t.Fatalf("%s: %v", d.name, err)
 			}
-			var resp map[string]any
-			if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &resp); err != nil {
-				t.Fatalf("%s reply is not one JSON object: %v; stdout: %q", d.name, err, stdout.String())
-			}
-			if resp["status"] != "unsupported" {
-				t.Fatalf("%s status = %v, want unsupported (reply %v)", d.name, resp["status"], resp)
-			}
-			if resp["error_code"] != "unsupported_operation" {
-				t.Fatalf("%s error_code = %v, want unsupported_operation", d.name, resp["error_code"])
-			}
-			if phase, ok := resp["error_phase"]; ok {
-				s, isString := phase.(string)
-				if !isString || !allowed[s] {
-					t.Fatalf("%s error_phase = %v, not allowed by observation.schema.json", d.name, phase)
-				}
+		})
+	}
+}
+
+// TestUnsupportedCheckRejectsInvalidPhases shows the check above fails for
+// replies that would stop docpresser run, including an upper-case key.
+func TestUnsupportedCheckRejectsInvalidPhases(t *testing.T) {
+	spec := "faultdriver=" + buildFaultDriver(t)
+	for _, mode := range []string{"unsupported_driver_phase", "unsupported_upper_phase"} {
+		t.Run(mode, func(t *testing.T) {
+			err := checkUnsupported(t, spec, mode)
+			if err == nil || !strings.Contains(err.Error(), "observation rejected") {
+				t.Fatalf("checkUnsupported(%s) = %v, want an observation schema rejection", mode, err)
 			}
 		})
 	}
