@@ -3,7 +3,7 @@
 Qualification and synthetic-workload harness for structured documents. YAML and
 JSON (I-JSON/JCS) today; XML, XHTML, SVG, OOXML and PDF planned.
 
-**Status: experimental (v0.2.2).** Version 0.2.2 implements the first wave:
+**Status: experimental (v0.2.3).** Version 0.2.3 implements the first wave:
 deterministic pack generation, `structcorpus` binding and pack validation,
 out-of-process driver execution under containment supervision with NDJSON
 evidence recording, the independent verifier and summary reports, and YAML and

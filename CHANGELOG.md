@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-21
+
 - The `go-yamlv3`, `yamlprims-go`, `python-yaml` and `node-yaml` drivers no longer report an `error_phase` for an unsupported operation. That phase failed observation schema validation and stopped the run. 0.2.2 fixed only the `yamlprims-rust` driver, and its note that the Go drivers already omitted the phase was incorrect.
 - The `node-yaml` driver answers `unsupported` for operations other than `load_value` and `project_jcs` instead of loading the input.
 - A test sends every subject driver an unsupported operation and checks its reply against the observation schema. The Linux CI job requires every driver toolchain for it.
@@ -35,7 +37,8 @@
 - Add out-of-process containment supervision, line-delimited JSON driver execution, and schema-validated NDJSON evidence recording.
 - Add the independent four-axis verifier (`correctness`, `containment`, `migration_divergence`, `telemetry`), summary reporting, and Wave 1 YAML/JSON subject drivers.
 
-[Unreleased]: https://github.com/3leaps/docpresser/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/3leaps/docpresser/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/3leaps/docpresser/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/3leaps/docpresser/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/3leaps/docpresser/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/3leaps/docpresser/compare/v0.1.0...v0.2.0
