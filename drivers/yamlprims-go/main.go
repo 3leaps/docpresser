@@ -157,7 +157,6 @@ func executeCase(req caseRequest, input []byte) caseResponse {
 			Subject:        "yamlprims-go",
 			SubjectVersion: subjectVersion(),
 			Status:         "unsupported",
-			ErrorPhase:     "driver",
 			ErrorCode:      "unsupported_operation",
 		}
 	}

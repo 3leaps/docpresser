@@ -331,7 +331,6 @@ def execute_case(req: dict, engine: str) -> dict:
             "subject": subj,
             "subject_version": subj_ver,
             "status": "unsupported",
-            "error_phase": "driver",
             "error_code": "unsupported_operation",
         }
 

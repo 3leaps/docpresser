@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- The `go-yamlv3`, `yamlprims-go`, `python-yaml` and `node-yaml` drivers no longer report an `error_phase` for an unsupported operation. That phase failed observation schema validation and stopped the run. 0.2.2 fixed only the `yamlprims-rust` driver, and its note that the Go drivers already omitted the phase was incorrect.
+- The `node-yaml` driver answers `unsupported` for operations other than `load_value` and `project_jcs` instead of loading the input.
+- A test sends every subject driver an unsupported operation and checks its reply against the observation schema. The Linux CI job requires every driver toolchain for it.
+
 ## [0.2.2] - 2026-11-20
 
 - The `yamlprims-rust` driver no longer reports an `error_phase` for an unsupported operation, matching the Go drivers. Previously its `driver` phase failed observation schema validation and stopped the run. `make driver-yamlprims-rust` and CI now also run the driver's tests, which check its error phases against the observation schema.

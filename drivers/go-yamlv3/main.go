@@ -135,7 +135,6 @@ func main() {
 			Subject:        "go-yamlv3",
 			SubjectVersion: subjectVersion(),
 			Status:         "unsupported",
-			ErrorPhase:     "driver",
 			ErrorCode:      "unsupported_operation",
 		})
 		return
