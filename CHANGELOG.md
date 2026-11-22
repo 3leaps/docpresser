@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-22
+
+- New `serde-yaml-rust` baseline driver loads YAML through `serde_yaml` 0.9.34+deprecated's public untyped API: `from_slice` into `serde_yaml::Value` for single-document profiles, the `Deserializer::from_slice` document iterator for `yaml-core` and `yamlprims-core-stream`, and `apply_merge` for `yamlprims-core-merge-apply`. It reports the same value notation as the `yamlprims-rust` driver. Its handshake reports the `serde_yaml` and `unsafe-libyaml` versions resolved by its committed `Cargo.lock`, and its build fails unless the lock matches the exact `serde_yaml` pin. Profiles that need resource limits or merge-key policies `serde_yaml` does not expose answer `unsupported` with `unsupported_profile`.
+- `make driver-serde-yaml-rust` builds and tests the driver with `--locked`; CI builds and tests both Rust drivers on Linux and macOS with each driver's minimum Rust version, and the cross-driver unsupported-operation test covers the new driver.
+
 ## [0.2.3] - 2026-11-21
 
 - The `go-yamlv3`, `yamlprims-go`, `python-yaml` and `node-yaml` drivers no longer report an `error_phase` for an unsupported operation. That phase failed observation schema validation and stopped the run. 0.2.2 fixed only the `yamlprims-rust` driver, and its note that the Go drivers already omitted the phase was incorrect.
@@ -37,7 +42,8 @@
 - Add out-of-process containment supervision, line-delimited JSON driver execution, and schema-validated NDJSON evidence recording.
 - Add the independent four-axis verifier (`correctness`, `containment`, `migration_divergence`, `telemetry`), summary reporting, and Wave 1 YAML/JSON subject drivers.
 
-[Unreleased]: https://github.com/3leaps/docpresser/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/3leaps/docpresser/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/3leaps/docpresser/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/3leaps/docpresser/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/3leaps/docpresser/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/3leaps/docpresser/compare/v0.2.0...v0.2.1

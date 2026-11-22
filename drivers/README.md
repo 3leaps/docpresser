@@ -4,13 +4,14 @@ Each directory under `drivers/` is an **independent, standalone subject driver**
 
 ## Driver Inventory (Wave 1)
 
-| Directory                 | Subject ID                                                             | Role     | Language / Engine                                                       | Build / Command                                                          |
-| :------------------------ | :--------------------------------------------------------------------- | :------- | :---------------------------------------------------------------------- | :----------------------------------------------------------------------- |
-| `drivers/yamlprims-go/`   | `yamlprims-go`                                                         | Target   | Go (`3leaps/yamlprims` + `3leaps/canonprims`)                           | `cd drivers/yamlprims-go && go build -o ../../bin/driver-yamlprims-go .` |
-| `drivers/yamlprims-rust/` | `yamlprims-rust`                                                       | Target   | Rust (`yamlprims` crate)                                                | `cd drivers/yamlprims-rust && cargo build --release --locked`            |
-| `drivers/go-yamlv3/`      | `go-yamlv3`                                                            | Baseline | Go (`gopkg.in/yaml.v3`)                                                 | `cd drivers/go-yamlv3 && go build -o ../../bin/driver-go-yamlv3 .`       |
-| `drivers/python-yaml/`    | `python-pyyaml-safe` / `python-pyyaml-csafe` / `python-builtin-yaml11` | Baseline | Python 3 (`PyYAML SafeLoader`, `CSafeLoader`, built-in YAML 1.1 parser) | `python3 drivers/python-yaml/driver.py --engine pyyaml-safe`             |
-| `drivers/node-yaml/`      | `node-yaml`                                                            | Baseline | Node.js (`js-yaml`, required / native JCS)                              | `node drivers/node-yaml/driver.mjs`                                      |
+| Directory                  | Subject ID                                                             | Role     | Language / Engine                                                                      | Build / Command                                                          |
+| :------------------------- | :--------------------------------------------------------------------- | :------- | :------------------------------------------------------------------------------------- | :----------------------------------------------------------------------- |
+| `drivers/yamlprims-go/`    | `yamlprims-go`                                                         | Target   | Go (`3leaps/yamlprims` + `3leaps/canonprims`)                                          | `cd drivers/yamlprims-go && go build -o ../../bin/driver-yamlprims-go .` |
+| `drivers/yamlprims-rust/`  | `yamlprims-rust`                                                       | Target   | Rust (`yamlprims` crate)                                                               | `cd drivers/yamlprims-rust && cargo build --release --locked`            |
+| `drivers/serde-yaml-rust/` | `serde-yaml-rust`                                                      | Baseline | Rust (`serde_yaml` 0.9.34+deprecated over `unsafe-libyaml`, untyped `Value` load path) | `cd drivers/serde-yaml-rust && cargo build --release --locked`           |
+| `drivers/go-yamlv3/`       | `go-yamlv3`                                                            | Baseline | Go (`gopkg.in/yaml.v3`)                                                                | `cd drivers/go-yamlv3 && go build -o ../../bin/driver-go-yamlv3 .`       |
+| `drivers/python-yaml/`     | `python-pyyaml-safe` / `python-pyyaml-csafe` / `python-builtin-yaml11` | Baseline | Python 3 (`PyYAML SafeLoader`, `CSafeLoader`, built-in YAML 1.1 parser)                | `python3 drivers/python-yaml/driver.py --engine pyyaml-safe`             |
+| `drivers/node-yaml/`       | `node-yaml`                                                            | Baseline | Node.js (`js-yaml`, required / native JCS)                                             | `node drivers/node-yaml/driver.mjs`                                      |
 
 ## Wire Protocol (`docpresser-driver/v0`)
 
