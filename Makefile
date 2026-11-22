@@ -1,5 +1,5 @@
 .PHONY: all help bootstrap bootstrap-force hooks-ensure tools sync dependencies verify-dependencies version version-set version-bump-major version-bump-minor version-bump-patch
-.PHONY: check lint test driver-yamlprims-rust build install build-all package package-sign release-verify-keys verify-release-key clean fmt fmt-check check-all precommit prepush pr-final license-audit license-check license-check-test content-check
+.PHONY: check lint test driver-yamlprims-rust driver-serde-yaml-rust build install build-all package package-sign release-verify-keys verify-release-key clean fmt fmt-check check-all precommit prepush pr-final license-audit license-check license-check-test content-check
 .PHONY: release-check release-prepare release-build doctor validate-app-identity
 .PHONY: sync-embedded-identity verify-embedded-identity test-standalone-binary cdrl-verify test-cdrl-verify
 .PHONY: verify-toolchain
@@ -345,6 +345,9 @@ test: verify-embedded-identity  ## Run all tests
 
 driver-yamlprims-rust:  ## Build and test the Rust yamlprims driver from its committed Cargo.lock
 	cd drivers/yamlprims-rust && cargo build --release --locked && cargo test --release --locked
+
+driver-serde-yaml-rust:  ## Build and test the Rust serde_yaml driver from its committed Cargo.lock
+	cd drivers/serde-yaml-rust && cargo build --release --locked && cargo test --release --locked
 
 lint:  ## Run lint checks with goneat
 	@if [ -z "$(GONEAT_BIN)" ]; then echo "❌ goneat not found. Run 'make bootstrap' first."; exit 1; fi
