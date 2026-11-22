@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -202,9 +203,15 @@ func TestBindCorpus_MapsStructcorpusBudgets(t *testing.T) {
 	}
 
 	for name, c := range map[string]struct{ execution, want string }{
-		"old field names": {`{"tier":"smoke","hazards":[],"budgets":{"max_wall_ms":2000}}`, `unknown field "max_wall_ms"`},
-		"unknown field":   {`{"tier":"smoke","hazards":[],"budgets":{"wall_ms":2000,"cpu_ms":5}}`, `unknown field "cpu_ms"`},
-		"no budget":       {`{"tier":"smoke","hazards":[],"budgets":{}}`, "no positive budget"},
+		"old field names":   {`{"tier":"smoke","hazards":[],"budgets":{"max_wall_ms":2000}}`, `unknown field "max_wall_ms"`},
+		"unknown field":     {`{"tier":"smoke","hazards":[],"budgets":{"wall_ms":2000,"cpu_ms":5}}`, `unknown field "cpu_ms"`},
+		"empty object":      {`{"tier":"smoke","hazards":[],"budgets":{}}`, "no budget declared"},
+		"null object":       {`{"tier":"smoke","hazards":[],"budgets":null}`, "null is not a budget object"},
+		"zero beside valid": {`{"tier":"smoke","hazards":[],"budgets":{"wall_ms":0,"output_bytes":65536}}`, "wall_ms: 0 is not a positive integer"},
+		"negative":          {`{"tier":"smoke","hazards":[],"budgets":{"memory_bytes":-1,"wall_ms":5}}`, "memory_bytes: -1 is not a positive integer"},
+		"null field":        {`{"tier":"smoke","hazards":[],"budgets":{"output_bytes":null,"wall_ms":5}}`, "output_bytes: null is not an integer"},
+		"fraction":          {`{"tier":"smoke","hazards":[],"budgets":{"wall_ms":1.5}}`, "wall_ms: 1.5 is not a positive integer"},
+		"string":            {`{"tier":"smoke","hazards":[],"budgets":{"wall_ms":"5"}}`, `wall_ms: "5" is not an integer`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := corpusFixture(t, c.execution, true)
@@ -228,5 +235,87 @@ func TestBindBudgets_ContainmentDefaults(t *testing.T) {
 	}
 	if got := bindBudgets(nil, "correctness"); got != nil {
 		t.Fatalf("undeclared correctness budgets = %+v, want nil", *got)
+	}
+}
+
+// TestBindCorpus_BindsCommittedBytesOnly shows the pack holds the commit's
+// bytes even when the working tree hides changes from git status.
+func TestBindCorpus_BindsCommittedBytesOnly(t *testing.T) {
+	t.Run("assume-unchanged edit", func(t *testing.T) {
+		dir := corpusFixture(t, smokeExecution, true)
+		gitRun(t, dir, "update-index", "--assume-unchanged", "fixtures/yaml/simple.yaml")
+		if err := os.WriteFile(filepath.Join(dir, "fixtures", "yaml", "simple.yaml"), []byte("a: 9\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if st := gitRun(t, dir, "status", "--porcelain", "--untracked-files=all"); st != "" {
+			t.Fatalf("precondition: status not clean: %q", st)
+		}
+		out := filepath.Join(t.TempDir(), "out")
+		loaded, err := BindCorpus(context.Background(), dir, "smoke", out)
+		if err != nil {
+			t.Fatalf("BindCorpus: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(out, filepath.FromSlash(loaded.Cases[0].InputPath)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "a: 1\n" {
+			t.Fatalf("bound input %q, want the committed bytes", got)
+		}
+	})
+	t.Run("ignored source", func(t *testing.T) {
+		dir := corpusFixture(t, smokeExecution, false)
+		// The manifest names an input that is ignored and never committed.
+		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("fixtures/yaml/simple.yaml\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		gitRun(t, dir, "init", "-q")
+		gitRun(t, dir, "add", "-A")
+		gitRun(t, dir, "commit", "-q", "-m", "fixture")
+		_, err := BindCorpus(context.Background(), dir, "smoke", filepath.Join(t.TempDir(), "out"))
+		if err == nil || !strings.Contains(err.Error(), "read static fixture") {
+			t.Fatalf("BindCorpus error = %v, want the uncommitted input to be missing", err)
+		}
+	})
+	t.Run("symlink in commit", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation needs privileges on Windows")
+		}
+		dir := corpusFixture(t, smokeExecution, false)
+		if err := os.Symlink("simple.yaml", filepath.Join(dir, "fixtures", "yaml", "link.yaml")); err != nil {
+			t.Fatal(err)
+		}
+		gitRun(t, dir, "init", "-q")
+		gitRun(t, dir, "add", "-A")
+		gitRun(t, dir, "commit", "-q", "-m", "fixture")
+		_, err := BindCorpus(context.Background(), dir, "smoke", filepath.Join(t.TempDir(), "out"))
+		if err == nil || !strings.Contains(err.Error(), "is not a regular file") {
+			t.Fatalf("BindCorpus error = %v, want symlink refused", err)
+		}
+	})
+}
+
+// TestBindCorpus_IgnoresGitRedirection shows GIT_DIR and GIT_WORK_TREE
+// cannot make the checks inspect another repository.
+func TestBindCorpus_IgnoresGitRedirection(t *testing.T) {
+	corpus := corpusFixture(t, smokeExecution, true)
+	head := gitRun(t, corpus, "rev-parse", "HEAD")
+	other := t.TempDir()
+	gitRun(t, other, "init", "-q")
+	if err := os.WriteFile(filepath.Join(other, "x"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, other, "add", "-A")
+	gitRun(t, other, "commit", "-q", "-m", "other")
+	t.Setenv("GIT_DIR", filepath.Join(other, ".git"))
+	t.Setenv("GIT_WORK_TREE", other)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(other, ".git", "index"))
+
+	loaded, err := BindCorpus(context.Background(), corpus, "smoke", filepath.Join(t.TempDir(), "out"))
+	if err != nil {
+		t.Fatalf("BindCorpus: %v", err)
+	}
+	if loaded.Pack.CorpusCommit != head {
+		t.Fatalf("CorpusCommit = %s, want corpus HEAD %s", loaded.Pack.CorpusCommit, head)
 	}
 }
