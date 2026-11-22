@@ -297,6 +297,64 @@ const INVALID_SCALAR_ENDINGS: &[&str] = &[
     ", expected null",
 ];
 
+/// Ending of serde's `invalid_type` message when a scalar has no `Value`
+/// representation, such as an integer outside the i64/u64 range, which serde
+/// delivers as i128/u128.
+const UNREPRESENTABLE_ENDING: &str = ", expected any YAML value";
+
+/// Whether `msg` ends with a well-formed duplicate-key diagnostic from the
+/// pinned `DuplicateKeyError`, at the start of the message or after a
+/// `<path>: ` prefix.
+fn is_duplicate_key(msg: &str) -> bool {
+    let at_boundary = |idx: usize| idx == 0 || msg[..idx].ends_with(": ");
+    for full in [
+        "duplicate entry with null key",
+        "duplicate entry in YAML map",
+        "duplicate entry with key `true`",
+        "duplicate entry with key `false`",
+    ] {
+        if msg.ends_with(full) && at_boundary(msg.len() - full.len()) {
+            return true;
+        }
+    }
+    let marker = "duplicate entry with key ";
+    let mut search = msg.len();
+    while let Some(idx) = msg[..search].rfind(marker) {
+        let rest = &msg[idx + marker.len()..];
+        if at_boundary(idx) && (is_debug_string(rest) || is_number_display(rest)) {
+            return true;
+        }
+        search = idx;
+    }
+    false
+}
+
+/// A Rust `{:?}` string literal spanning all of `s`: opening and closing
+/// quotes with every inner quote escaped.
+fn is_debug_string(s: &str) -> bool {
+    let Some(inner) = s.strip_prefix('"').and_then(|t| t.strip_suffix('"')) else {
+        return false;
+    };
+    let mut escaped = false;
+    for c in inner.chars() {
+        match (escaped, c) {
+            (true, _) => escaped = false,
+            (false, '\\') => escaped = true,
+            (false, '"') => return false,
+            _ => {}
+        }
+    }
+    !escaped
+}
+
+/// serde_yaml's `Display` of a `Number`: digits, sign, decimal point,
+/// exponent, or `.inf`/`.nan` spellings, with no spaces or quotes.
+fn is_number_display(s: &str) -> bool {
+    !s.is_empty()
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'+' | b'-'))
+}
+
 /// Removes the ` at line N column M` suffix serde_yaml appends to a located
 /// diagnostic.
 fn strip_mark(msg: &str) -> &str {
@@ -323,7 +381,12 @@ fn strip_mark(msg: &str) -> &str {
 /// - an invalid explicitly tagged scalar: the message ends with serde's fixed
 ///   `, expected ...` text; a duplicate-key message cannot end that way
 ///   because a string key is quoted.
-/// - remaining messages from deserializing a `Value` are duplicate keys.
+/// - a scalar with no `Value` representation (an integer outside i64/u64):
+///   the message ends with serde's fixed `, expected any YAML value`.
+/// - a duplicate key: the message ends with the pinned duplicate-key
+///   diagnostic, checked as a whole (quoted string, number, bool, null or
+///   collection key).
+/// - anything else is reported as unclassified rather than guessed.
 ///
 /// The grammar is that of the exact pinned version; the tests pin each case,
 /// including inputs whose text imitates another diagnostic.
@@ -347,7 +410,13 @@ fn classify(err: &serde_yaml::Error) -> (&'static str, &'static str) {
     if INVALID_SCALAR_ENDINGS.iter().any(|e| msg.ends_with(e)) {
         return ("resolution", "invalid_scalar");
     }
-    ("structure", "duplicate_key")
+    if msg.ends_with(UNREPRESENTABLE_ENDING) {
+        return ("resolution", "unrepresentable_value");
+    }
+    if is_duplicate_key(msg) {
+        return ("structure", "duplicate_key");
+    }
+    ("resolution", "unclassified")
 }
 
 fn error_response(req: &CaseRequest, err: &serde_yaml::Error) -> CaseResponse {
@@ -537,6 +606,80 @@ mod tests {
                 "error",
                 "resolution",
                 "invalid_scalar",
+            ),
+            // Integers outside i64/u64 have no Value representation.
+            (
+                "",
+                b"18446744073709551616\n",
+                "error",
+                "resolution",
+                "unrepresentable_value",
+            ),
+            (
+                "",
+                b"-9223372036854775809\n",
+                "error",
+                "resolution",
+                "unrepresentable_value",
+            ),
+            (
+                "",
+                b"0x10000000000000000\n",
+                "error",
+                "resolution",
+                "unrepresentable_value",
+            ),
+            (
+                "",
+                b"a: !!int 18446744073709551616\n",
+                "error",
+                "resolution",
+                "unrepresentable_value",
+            ),
+            (
+                "yaml-core",
+                b"a:\n  b: [1, -9223372036854775809]\n",
+                "error",
+                "resolution",
+                "unrepresentable_value",
+            ),
+            (
+                "",
+                b"? 18446744073709551616\n: x\n",
+                "error",
+                "resolution",
+                "unrepresentable_value",
+            ),
+            (
+                "",
+                b"\"duplicate entry with key 1\": 18446744073709551616\n",
+                "error",
+                "resolution",
+                "unrepresentable_value",
+            ),
+            // Duplicate keys of every key kind.
+            ("", b"1: a\n1: b\n", "error", "structure", "duplicate_key"),
+            (
+                "",
+                b"true: a\ntrue: b\n",
+                "error",
+                "structure",
+                "duplicate_key",
+            ),
+            ("", b"~: a\n~: b\n", "error", "structure", "duplicate_key"),
+            (
+                "",
+                b"[1]: a\n[1]: b\n",
+                "error",
+                "structure",
+                "duplicate_key",
+            ),
+            (
+                "",
+                b"outer:\n  'q\"x': 1\n  'q\"x': 2\n",
+                "error",
+                "structure",
+                "duplicate_key",
             ),
         ];
         for (profile, input, status, phase, code) in cases {
