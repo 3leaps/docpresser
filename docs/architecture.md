@@ -88,7 +88,8 @@ Docpresser supports two pack sources:
    `3leaps/structcorpus` checkout (`python3 tools/corpus.py hydrate` + `verify`)
    into an isolated pack directory and binds the exact commit and hydrated file
    digests into `pack.json`. It reads a snapshot of the checked-out commit's
-   tree, never the working tree; the checkout must be the top of its own git
+   tree (replacement objects disabled, each blob checked against its object
+   id), never the working tree; the checkout must be the top of its own git
    work tree with no uncommitted or untracked changes. Each case's
    `execution.budgets` (`wall_ms`, `memory_bytes`, `output_bytes`, each a
    positive integer) binds exactly; on the containment axis an undeclared

@@ -4,6 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha1" //nolint:gosec // git object ids
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -259,7 +262,8 @@ func allowedTiersFor(tier string) (map[string]bool, error) {
 
 // corpusGitEnv is the process environment without GIT_* variables, so
 // repository, work-tree, index, object-store and configuration redirection
-// cannot make git inspect anything other than the corpus root.
+// cannot make git inspect anything other than the corpus root. Replacement
+// objects are disabled as well (see corpusGitArgs).
 func corpusGitEnv() []string {
 	env := make([]string, 0, len(os.Environ())+1)
 	for _, kv := range os.Environ() {
@@ -268,11 +272,33 @@ func corpusGitEnv() []string {
 		}
 		env = append(env, kv)
 	}
-	return append(env, "GIT_CONFIG_NOSYSTEM=1")
+	return append(env, "GIT_CONFIG_NOSYSTEM=1", "GIT_NO_REPLACE_OBJECTS=1")
+}
+
+// corpusGitArgs prefixes every corpus git command: refs/replace must not
+// substitute a commit, tree or blob for the one the pack records.
+func corpusGitArgs(absCorpus string, args ...string) []string {
+	return append([]string{"--no-replace-objects", "-C", absCorpus}, args...)
+}
+
+// gitBlobID returns the git object id of a blob with the given content, in
+// the hash family of wantID (SHA-1 for 40 hex digits, SHA-256 for 64).
+func gitBlobID(data []byte, wantID string) string {
+	header := []byte("blob " + strconv.Itoa(len(data)) + "\x00")
+	if len(wantID) == 64 {
+		h := sha256.New()
+		h.Write(header)
+		h.Write(data)
+		return hex.EncodeToString(h.Sum(nil))
+	}
+	h := sha1.New() //nolint:gosec // git object ids, not a security hash choice
+	h.Write(header)
+	h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func corpusGit(ctx context.Context, absCorpus string, stdout io.Writer, args ...string) error {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", absCorpus}, args...)...)
+	cmd := exec.CommandContext(ctx, "git", corpusGitArgs(absCorpus, args...)...)
 	cmd.Env = corpusGitEnv()
 	var stderr bytes.Buffer
 	cmd.Stdout = stdout
@@ -384,7 +410,7 @@ func exportCommitTree(ctx context.Context, absCorpus, commit, dst string) error 
 		objects.WriteString(e.object)
 		objects.WriteByte('\n')
 	}
-	cmd := exec.CommandContext(ctx, "git", "-C", absCorpus, "cat-file", "--batch")
+	cmd := exec.CommandContext(ctx, "git", corpusGitArgs(absCorpus, "cat-file", "--batch")...)
 	cmd.Env = corpusGitEnv()
 	cmd.Stdin = &objects
 	var stderr bytes.Buffer
@@ -418,6 +444,11 @@ func exportCommitTree(ctx context.Context, absCorpus, commit, dst string) error 
 			if b, err := reader.ReadByte(); err != nil || b != '\n' {
 				return fmt.Errorf("blob %s not terminated", e.path)
 			}
+			// cat-file echoes the requested id; hash the bytes so a
+			// substituted object cannot pass as the committed blob.
+			if got := gitBlobID(data, e.object); got != e.object {
+				return fmt.Errorf("blob %s content hashes to %s, not %s", e.path, got, e.object)
+			}
 			if err := root.MkdirAll(filepath.Dir(filepath.FromSlash(e.path)), 0o750); err != nil {
 				return fmt.Errorf("create snapshot directory for %s: %w", e.path, err)
 			}
@@ -431,10 +462,14 @@ func exportCommitTree(ctx context.Context, absCorpus, commit, dst string) error 
 		}
 		return nil
 	}()
-	waitErr := cmd.Wait()
 	if readErr != nil {
+		// Stop cat-file before reaping it: it may be blocked writing the
+		// remaining blobs into a pipe nobody will read.
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
 		return readErr
 	}
+	waitErr := cmd.Wait()
 	if waitErr != nil {
 		return fmt.Errorf("git cat-file: %w (%s)", waitErr, strings.TrimSpace(stderr.String()))
 	}

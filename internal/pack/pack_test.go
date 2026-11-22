@@ -1,6 +1,7 @@
 package pack
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/3leaps/docpresser/internal/model"
 )
@@ -317,5 +319,115 @@ func TestBindCorpus_IgnoresGitRedirection(t *testing.T) {
 	}
 	if loaded.Pack.CorpusCommit != head {
 		t.Fatalf("CorpusCommit = %s, want corpus HEAD %s", loaded.Pack.CorpusCommit, head)
+	}
+}
+
+// TestBindCorpus_IgnoresReplacementObjects shows refs/replace cannot
+// substitute the bytes bound for the recorded commit.
+func TestBindCorpus_IgnoresReplacementObjects(t *testing.T) {
+	t.Run("paired manifest and input blobs", func(t *testing.T) {
+		dir := corpusFixture(t, smokeExecution, true)
+		origFixture := gitRun(t, dir, "rev-parse", "HEAD:fixtures/yaml/simple.yaml")
+		origManifest := gitRun(t, dir, "rev-parse", "HEAD:manifests/cases.jsonl")
+		// A replacement pair whose manifest digest matches its fixture.
+		alt := []byte("a: 2\n")
+		altFixturePath := filepath.Join(t.TempDir(), "alt.yaml")
+		if err := os.WriteFile(altFixturePath, alt, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		manifest, err := os.ReadFile(filepath.Join(dir, "manifests", "cases.jsonl"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		altManifest := strings.Replace(string(manifest), sha256Hex([]byte("a: 1\n")), sha256Hex(alt), 1)
+		altManifestPath := filepath.Join(t.TempDir(), "alt.jsonl")
+		if err := os.WriteFile(altManifestPath, []byte(altManifest), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		newFixture := gitRun(t, dir, "hash-object", "-w", altFixturePath)
+		newManifest := gitRun(t, dir, "hash-object", "-w", altManifestPath)
+		gitRun(t, dir, "replace", origFixture, newFixture)
+		gitRun(t, dir, "replace", origManifest, newManifest)
+
+		out := filepath.Join(t.TempDir(), "out")
+		loaded, err := BindCorpus(context.Background(), dir, "smoke", out)
+		if err != nil {
+			t.Fatalf("BindCorpus: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(out, filepath.FromSlash(loaded.Cases[0].InputPath)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "a: 1\n" {
+			t.Fatalf("bound input %q, want the committed bytes", got)
+		}
+	})
+	t.Run("replaced commit", func(t *testing.T) {
+		dir := corpusFixture(t, smokeExecution, true)
+		orig := gitRun(t, dir, "rev-parse", "HEAD")
+		if err := os.WriteFile(filepath.Join(dir, "fixtures", "yaml", "simple.yaml"), []byte("a: 3\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		gitRun(t, dir, "commit", "-q", "-am", "other")
+		other := gitRun(t, dir, "rev-parse", "HEAD")
+		gitRun(t, dir, "reset", "-q", "--hard", orig)
+		gitRun(t, dir, "replace", orig, other)
+
+		loaded, err := BindCorpus(context.Background(), dir, "smoke", filepath.Join(t.TempDir(), "out"))
+		if err != nil {
+			t.Fatalf("BindCorpus: %v", err)
+		}
+		if loaded.Pack.CorpusCommit != orig || loaded.Cases[0].InputSHA256 != sha256Hex([]byte("a: 1\n")) {
+			t.Fatalf("bound commit %s input %s, want original commit %s and its bytes", loaded.Pack.CorpusCommit, loaded.Cases[0].InputSHA256, orig)
+		}
+	})
+}
+
+func TestGitBlobIDMatchesGit(t *testing.T) {
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-q")
+	for _, data := range [][]byte{nil, []byte("a: 1\n"), []byte("\x00\xff binary\n")} {
+		path := filepath.Join(t.TempDir(), "blob")
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		want := gitRun(t, dir, "hash-object", path)
+		if got := gitBlobID(data, want); got != want {
+			t.Fatalf("gitBlobID(%q) = %s, git says %s", data, got, want)
+		}
+	}
+}
+
+// TestExportCommitTree_FailsPromptlyOnWriteError shows a snapshot write
+// failure returns an error instead of hanging on cat-file's pending output.
+func TestExportCommitTree_FailsPromptlyOnWriteError(t *testing.T) {
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-q")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("first\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Far more than a pipe buffer remains after the first blob fails.
+	big := bytes.Repeat([]byte("0123456789abcdef"), 1<<16)
+	if err := os.WriteFile(filepath.Join(dir, "b.bin"), big, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "fixture")
+	commit := gitRun(t, dir, "rev-parse", "HEAD")
+
+	dst := t.TempDir()
+	// A directory where the first file belongs makes its write fail.
+	if err := os.Mkdir(filepath.Join(dst, "a.txt"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- exportCommitTree(context.Background(), dir, commit, dst) }()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "write snapshot file a.txt") {
+			t.Fatalf("exportCommitTree error = %v, want the a.txt write failure", err)
+		}
+	case <-time.After(60 * time.Second):
+		t.Fatal("exportCommitTree did not return after a write failure")
 	}
 }
