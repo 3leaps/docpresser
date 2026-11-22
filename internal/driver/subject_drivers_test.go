@@ -78,49 +78,52 @@ func buildGoDriver(dir string) func(t *testing.T, root string) string {
 	}
 }
 
-// buildRustDriver builds the yamlprims-rust driver and returns the
-// executable Cargo reports for it, wherever the target directory or target
-// triple places it.
-func buildRustDriver(t *testing.T, root string) string {
-	t.Helper()
-	cargo := toolOrSkip(t, "cargo")
-	cmd := exec.Command(cargo, "build", "--release", "--locked", "--message-format=json-render-diagnostics")
-	cmd.Dir = filepath.Join(root, "drivers", "yamlprims-rust")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		setupUnavailable(t, "build yamlprims-rust: %v\n%s", err, stderr.String())
-	}
-	var bin string
-	scanner := bufio.NewScanner(&stdout)
-	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	for scanner.Scan() {
-		var msg struct {
-			Reason     string  `json:"reason"`
-			Executable *string `json:"executable"`
-			Target     struct {
-				Name string `json:"name"`
-			} `json:"target"`
+// buildRustDriver builds the Rust driver in drivers/<dir>, whose binary target
+// has the same name, and returns the executable Cargo reports for it,
+// wherever the target directory or target triple places it.
+func buildRustDriver(dir string) func(t *testing.T, root string) string {
+	return func(t *testing.T, root string) string {
+		t.Helper()
+		cargo := toolOrSkip(t, "cargo")
+		cmd := exec.Command(cargo, "build", "--release", "--locked", "--message-format=json-render-diagnostics")
+		cmd.Dir = filepath.Join(root, "drivers", dir)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			setupUnavailable(t, "build %s: %v\n%s", dir, err, stderr.String())
 		}
-		if json.Unmarshal(scanner.Bytes(), &msg) != nil {
-			continue
+		var bin string
+		scanner := bufio.NewScanner(&stdout)
+		scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+		for scanner.Scan() {
+			var msg struct {
+				Reason     string  `json:"reason"`
+				Executable *string `json:"executable"`
+				Target     struct {
+					Name string `json:"name"`
+				} `json:"target"`
+			}
+			if json.Unmarshal(scanner.Bytes(), &msg) != nil {
+				continue
+			}
+			if msg.Reason == "compiler-artifact" && msg.Target.Name == dir && msg.Executable != nil {
+				bin = *msg.Executable
+			}
 		}
-		if msg.Reason == "compiler-artifact" && msg.Target.Name == "yamlprims-rust" && msg.Executable != nil {
-			bin = *msg.Executable
+		if bin == "" {
+			t.Fatalf("cargo reported no %s executable", dir)
 		}
+		return specOf(t, dir, bin)
 	}
-	if bin == "" {
-		t.Fatalf("cargo reported no yamlprims-rust executable")
-	}
-	return specOf(t, "yamlprims-rust", bin)
 }
 
 func subjectDrivers() []subjectDriver {
 	return []subjectDriver{
 		{name: "go-yamlv3", spec: buildGoDriver("go-yamlv3")},
 		{name: "yamlprims-go", spec: buildGoDriver("yamlprims-go")},
-		{name: "yamlprims-rust", spec: buildRustDriver},
+		{name: "yamlprims-rust", spec: buildRustDriver("yamlprims-rust")},
+		{name: "serde-yaml-rust", spec: buildRustDriver("serde-yaml-rust")},
 		{name: "python-yaml", spec: func(t *testing.T, root string) string {
 			return specOf(t, "python-yaml", toolOrSkip(t, "python3"),
 				filepath.Join(root, "drivers", "python-yaml", "driver.py"), "--engine", "builtin-yaml11")

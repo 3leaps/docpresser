@@ -1,6 +1,6 @@
 # Architecture
 
-Status: target design. Version 0.2.3 implements part of it: drivers run as
+Status: target design. Version 0.2.4 implements part of it: drivers run as
 separate processes with a wall-clock timeout, a temporary working directory, a
 scrubbed environment, and capped output; on Unix the process group is
 terminated on timeout and peak memory is measured after exit (on Linux the
@@ -86,8 +86,16 @@ Docpresser supports two pack sources:
 
 1. **Pinned `structcorpus` hydration (`bind-corpus`):** invokes a pinned
    `3leaps/structcorpus` checkout (`python3 tools/corpus.py hydrate` + `verify`)
-   into an isolated pack directory and binds the exact commit, profile revision,
-   and hydrated file digests into `pack.json`.
+   into an isolated pack directory and binds the exact commit and hydrated file
+   digests into `pack.json`. It reads a snapshot of the checked-out commit's
+   tree (replacement objects disabled, each blob checked against its object
+   id), never the working tree; the checkout must be the top of its own git
+   work tree with no uncommitted or untracked changes. Each case's
+   `execution.budgets` (`wall_ms`, `memory_bytes`, `output_bytes`, each a
+   positive integer) binds exactly; on the containment axis an undeclared
+   budget takes the containment default. Per-case profile revisions are not yet recorded in the pack, and
+   cases without a value expectation (such as resource ladders) cannot be
+   bound yet.
 2. **Seeded synthetic scale packs (`generate`):** deterministically synthesizes
    large structured documents (`10 KiB` to `100 MiB` multi-document YAML
    streams, OpenAPI/schema trees, JSON/I-JSON payloads, deep XML/XHTML/SVG trees,

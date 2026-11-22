@@ -1,0 +1,26 @@
+[package]
+name = "docpresser-driver-serde-yaml-rust"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88.0"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Its own workspace root, so the Cargo.lock beside this file is the active lock;
+# build.rs checks it against the exact serde_yaml pin and reads the locked
+# unsafe-libyaml backend version from it.
+[workspace]
+
+[[bin]]
+name = "serde-yaml-rust"
+path = "src/main.rs"
+
+[dependencies]
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "=0.9.34"
+sha2 = "0.10"
+
+[build-dependencies]
+toml = "=1.1.5"

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-22
+
+- New `serde-yaml-rust` baseline driver loads YAML through `serde_yaml` 0.9.34+deprecated's public untyped API: `from_slice` into `serde_yaml::Value` with no profile and for `yamlprims-core-merge-as-key`, the `Deserializer::from_slice` document iterator for `yaml-core`, and `apply_merge` for `yamlprims-core-merge-apply`. It reports the same value notation as the `yamlprims-rust` driver. Its handshake reports the `serde_yaml` and `unsafe-libyaml` versions resolved by its committed `Cargo.lock`, and its build fails unless the lock matches the exact `serde_yaml` pin. `serde_yaml` keeps merge keys as ordinary keys and exposes no resource limits, so every other profile, including unknown names and profiles that reject merge keys or set limits, answers `unsupported` with `unsupported_profile`. Errors are classified from `serde_yaml`'s fixed diagnostics without matching input text quoted in a message.
+- `bind-corpus` reads structcorpus case budgets under their actual field names (`wall_ms`, `memory_bytes`, `output_bytes`). Previously it read other names, so a declared budget bound as zero and displaced the containment defaults. A budget object that is null, empty, or has an unknown field or a value that is not a positive integer now fails the bind, and on the containment axis an undeclared budget takes the containment default. Binding the structcorpus `stress` tier still fails: its resource-ladder cases carry no value expectations.
+- `bind-corpus` binds the corpus from a snapshot of the checked-out commit's tree, read with git plumbing with replacement objects disabled, and checks every blob against its object id; working-tree, ignored, index-hidden and replaced content cannot enter the pack. The corpus root must be the top of its own clean git checkout, git environment variables that redirect the repository are ignored, and symbolic links or submodules in the corpus tree are refused. Previously, when the commit could not be read it recorded a fixed default commit, and it read files from the working tree.
+- `make driver-serde-yaml-rust` builds and tests the driver with `--locked`; CI builds and tests both Rust drivers on Linux and macOS with each driver's minimum Rust version, and the cross-driver unsupported-operation test covers the new driver.
+
 ## [0.2.3] - 2026-11-21
 
 - The `go-yamlv3`, `yamlprims-go`, `python-yaml` and `node-yaml` drivers no longer report an `error_phase` for an unsupported operation. That phase failed observation schema validation and stopped the run. 0.2.2 fixed only the `yamlprims-rust` driver, and its note that the Go drivers already omitted the phase was incorrect.
@@ -37,7 +44,8 @@
 - Add out-of-process containment supervision, line-delimited JSON driver execution, and schema-validated NDJSON evidence recording.
 - Add the independent four-axis verifier (`correctness`, `containment`, `migration_divergence`, `telemetry`), summary reporting, and Wave 1 YAML/JSON subject drivers.
 
-[Unreleased]: https://github.com/3leaps/docpresser/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/3leaps/docpresser/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/3leaps/docpresser/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/3leaps/docpresser/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/3leaps/docpresser/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/3leaps/docpresser/compare/v0.2.0...v0.2.1
