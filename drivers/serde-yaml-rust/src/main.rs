@@ -75,8 +75,11 @@ struct CaseResponse {
 }
 
 /// How a profile maps onto serde_yaml's public loading surface. serde_yaml
-/// exposes no resource limits or merge-key policy options, so profiles that
-/// depend on them are unsupported rather than silently approximated.
+/// exposes no resource limits and no merge-key option: it keeps `<<` as an
+/// ordinary key (the AsKey policy) unless `Value::apply_merge` is called. Only
+/// profiles whose policy that surface honors exactly are supported; every
+/// other name, including unknown ones, is unsupported rather than
+/// approximated.
 #[derive(Debug, PartialEq)]
 enum Mode {
     /// `serde_yaml::from_slice::<Value>`: exactly one document.
@@ -90,11 +93,15 @@ enum Mode {
 
 fn mode_for_profile(profile: &str) -> Mode {
     match profile {
-        "yaml-core" | "yamlprims-core-stream" => Mode::Stream,
-        "yamlprims-core-merge-apply" => Mode::MergeApply,
+        // No profile requested: serde_yaml's ordinary single-document load.
+        "" => Mode::Single,
+        // Merge keys as ordinary keys, document stream.
+        "yaml-core" => Mode::Stream,
         "yamlprims-core-merge-as-key" => Mode::Single,
-        p if p.starts_with("yamlprims-core-") => Mode::Unsupported,
-        _ => Mode::Single,
+        "yamlprims-core-merge-apply" => Mode::MergeApply,
+        // Merge-key rejection, resource limits and unknown profiles cannot be
+        // honored through the public untyped API.
+        _ => Mode::Unsupported,
     }
 }
 
@@ -241,12 +248,85 @@ fn unsupported_response(case_id: String, code: &str) -> CaseResponse {
     }
 }
 
+/// serde_yaml's fixed diagnostics (pinned 0.9.34 `ErrorImpl` variants), with
+/// the observation phase and code each maps to.
+const FIXED_MESSAGES: &[(&str, &str, &str)] = &[
+    ("recursion limit exceeded", "limit", "recursion_limit"),
+    ("repetition limit exceeded", "limit", "repetition_limit"),
+    ("unknown anchor", "structure", "unknown_anchor"),
+    (
+        "deserializing from YAML containing more than one document is not supported",
+        "structure",
+        "multiple_documents",
+    ),
+    (
+        "expected a mapping or list of mappings for merging, but found scalar",
+        "structure",
+        "merge_rejected",
+    ),
+    (
+        "unexpected tagged value in merge",
+        "structure",
+        "merge_rejected",
+    ),
+    (
+        "expected a mapping for merging, but found scalar",
+        "structure",
+        "merge_rejected",
+    ),
+    (
+        "expected a mapping for merging, but found sequence",
+        "structure",
+        "merge_rejected",
+    ),
+    ("EOF while parsing a value", "syntax", "end_of_stream"),
+    ("empty YAML tag is not allowed", "syntax", "empty_tag"),
+    (
+        "failed to parse YAML number",
+        "resolution",
+        "invalid_number",
+    ),
+];
+
+/// Endings of serde's `invalid_value` message for an explicitly tagged scalar
+/// that does not parse (`!!bool`, `!!int`, `!!float`, `!!null`).
+const INVALID_SCALAR_ENDINGS: &[&str] = &[
+    ", expected a boolean",
+    ", expected an integer",
+    ", expected a float",
+    ", expected null",
+];
+
+/// Removes the ` at line N column M` suffix serde_yaml appends to a located
+/// diagnostic.
+fn strip_mark(msg: &str) -> &str {
+    if let Some(idx) = msg.rfind(" at line ") {
+        let tail = &msg[idx + " at line ".len()..];
+        if let Some((line, col)) = tail.split_once(" column ") {
+            let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+            if digits(line) && digits(col) {
+                return &msg[..idx];
+            }
+        }
+    }
+    msg
+}
+
 /// Classifies a serde_yaml error into an observation phase and code.
 ///
-/// serde_yaml exposes no error kind. Its Debug output for errors raised by
-/// libyaml names the libyaml error class (`kind: SCANNER` and so on), and its
-/// own errors use fixed messages. Both are specific to the exact pinned
-/// version; the tests pin each mapping.
+/// serde_yaml exposes no error kind, and its messages can quote input text
+/// (key paths, duplicate keys, scalar values), so classification never
+/// searches a message for a phrase:
+/// - libyaml errors: the Debug form starts with `Error { kind: <CLASS>`,
+///   which no other variant produces (they start with `Error("`).
+/// - serde_yaml's own errors: the whole message equals a fixed diagnostic.
+/// - an invalid explicitly tagged scalar: the message ends with serde's fixed
+///   `, expected ...` text; a duplicate-key message cannot end that way
+///   because a string key is quoted.
+/// - remaining messages from deserializing a `Value` are duplicate keys.
+///
+/// The grammar is that of the exact pinned version; the tests pin each case,
+/// including inputs whose text imitates another diagnostic.
 fn classify(err: &serde_yaml::Error) -> (&'static str, &'static str) {
     let debug = format!("{err:?}");
     if let Some(rest) = debug.strip_prefix("Error { kind: ") {
@@ -259,25 +339,15 @@ fn classify(err: &serde_yaml::Error) -> (&'static str, &'static str) {
             _ => ("syntax", "libyaml_other"),
         };
     }
-    let msg = err.to_string();
-    let has = |s: &str| msg.contains(s);
-    if has("recursion limit exceeded") {
-        ("limit", "recursion_limit")
-    } else if has("repetition limit exceeded") {
-        ("limit", "repetition_limit")
-    } else if has("duplicate entry") {
-        ("structure", "duplicate_key")
-    } else if has("unknown anchor") {
-        ("structure", "unknown_anchor")
-    } else if has("more than one document") {
-        ("structure", "multiple_documents")
-    } else if has("for merging") || has("in merge") {
-        ("structure", "merge_rejected")
-    } else if has("EOF while parsing") {
-        ("syntax", "end_of_stream")
-    } else {
-        ("resolution", "other")
+    let display = err.to_string();
+    let msg = strip_mark(&display);
+    if let Some((_, phase, code)) = FIXED_MESSAGES.iter().find(|(m, _, _)| *m == msg) {
+        return (phase, code);
     }
+    if INVALID_SCALAR_ENDINGS.iter().any(|e| msg.ends_with(e)) {
+        return ("resolution", "invalid_scalar");
+    }
+    ("structure", "duplicate_key")
 }
 
 fn error_response(req: &CaseRequest, err: &serde_yaml::Error) -> CaseResponse {
@@ -376,6 +446,98 @@ mod tests {
                 "structure",
                 "merge_rejected",
             ),
+            // Input text that imitates another diagnostic must not select it.
+            (
+                "",
+                b"recursion limit exceeded: 1\nrecursion limit exceeded: 2\n",
+                "error",
+                "structure",
+                "duplicate_key",
+            ),
+            (
+                "",
+                b"repetition limit exceeded: 1\nrepetition limit exceeded: 2\n",
+                "error",
+                "structure",
+                "duplicate_key",
+            ),
+            (
+                "",
+                b"unknown anchor: 1\nunknown anchor: 2\n",
+                "error",
+                "structure",
+                "duplicate_key",
+            ),
+            (
+                "",
+                b"x: !!int \"recursion limit exceeded\"\n",
+                "error",
+                "resolution",
+                "invalid_scalar",
+            ),
+            (
+                "",
+                b"x: !!int \"repetition limit exceeded\"\n",
+                "error",
+                "resolution",
+                "invalid_scalar",
+            ),
+            (
+                "",
+                b"x: !!int \"duplicate entry\"\n",
+                "error",
+                "resolution",
+                "invalid_scalar",
+            ),
+            (
+                "",
+                b"x: !!int \"unknown anchor\"\n",
+                "error",
+                "resolution",
+                "invalid_scalar",
+            ),
+            (
+                "",
+                b"x: !!int \"EOF while parsing a value\"\n",
+                "error",
+                "resolution",
+                "invalid_scalar",
+            ),
+            (
+                "",
+                b"x: !!bool \"for merging\"\n",
+                "error",
+                "resolution",
+                "invalid_scalar",
+            ),
+            (
+                "",
+                b"x: !!float \"more than one document\"\n",
+                "error",
+                "resolution",
+                "invalid_scalar",
+            ),
+            (
+                "",
+                b"x: !!null \"in merge\"\n",
+                "error",
+                "resolution",
+                "invalid_scalar",
+            ),
+            (
+                "",
+                b"? \", expected an integer\"\n: 1\n? \", expected an integer\"\n: 2\n",
+                "error",
+                "structure",
+                "duplicate_key",
+            ),
+            (
+                "",
+                b"recursion limit exceeded:\n  a: !!int x\n",
+                "error",
+                "resolution",
+                "invalid_scalar",
+            ),
         ];
         for (profile, input, status, phase, code) in cases {
             let resp = run_case(profile, input);
@@ -409,6 +571,40 @@ mod tests {
                 r#"[{"t":"str","v":"f"},{"items":[{"t":"bool","v":true}],"t":"seq"}]],"t":"map"}]"#
             ))
         );
+    }
+
+    #[test]
+    fn only_honored_profiles_are_supported() {
+        let merge = b"<<: {a: 1}\nb: 2\n";
+        for profile in [
+            "yamlprims-core",
+            "yamlprims-core-stream",
+            "yamlprims-core-limits",
+            "yamlprims-core-depth128",
+            "yamlprims-core-next",
+            "yamlprims-next-limits",
+            "yaml-core-strict",
+            "YAML-CORE",
+        ] {
+            let resp = run_case(profile, merge);
+            assert_eq!(resp.status, "unsupported", "{profile}");
+            assert_eq!(
+                resp.error_code.as_deref(),
+                Some("unsupported_profile"),
+                "{profile}"
+            );
+            assert!(resp.error_phase.is_none(), "{profile}");
+        }
+        // AsKey profiles keep `<<` as an ordinary key.
+        for profile in ["", "yaml-core", "yamlprims-core-merge-as-key"] {
+            let resp = run_case(profile, merge);
+            assert_eq!(resp.status, "ok", "{profile}");
+            let v = resp.canonical_value.expect("value");
+            assert!(v.contains(r#"{"t":"str","v":"<<"}"#), "{profile}: {v}");
+        }
+        let resp = run_case("yamlprims-core-merge-apply", merge);
+        assert_eq!(resp.status, "ok");
+        assert!(!resp.canonical_value.expect("value").contains("<<"));
     }
 
     #[test]
