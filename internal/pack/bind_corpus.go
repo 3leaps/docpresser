@@ -37,10 +37,28 @@ type structcorpusExecution struct {
 	Budgets *structcorpusBudgets `json:"budgets,omitempty"`
 }
 
+// structcorpusBudgets mirrors structcorpus case.v1 execution.budgets.
 type structcorpusBudgets struct {
-	MaxWallMs      int64 `json:"max_wall_ms,omitempty"`
-	MaxRSSBytes    int64 `json:"max_rss_bytes,omitempty"`
-	MaxOutputBytes int64 `json:"max_output_bytes,omitempty"`
+	WallMs      int64 `json:"wall_ms,omitempty"`
+	MemoryBytes int64 `json:"memory_bytes,omitempty"`
+	OutputBytes int64 `json:"output_bytes,omitempty"`
+}
+
+// UnmarshalJSON rejects unknown budget fields, so a renamed field fails the
+// bind instead of silently binding a zero budget.
+func (b *structcorpusBudgets) UnmarshalJSON(data []byte) error {
+	type plain structcorpusBudgets
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var p plain
+	if err := dec.Decode(&p); err != nil {
+		return fmt.Errorf("execution.budgets: %w", err)
+	}
+	if p.WallMs <= 0 && p.MemoryBytes <= 0 && p.OutputBytes <= 0 {
+		return fmt.Errorf("execution.budgets: no positive budget")
+	}
+	*b = structcorpusBudgets(p)
+	return nil
 }
 
 type structcorpusExpect struct {
@@ -79,7 +97,10 @@ func BindCorpus(ctx context.Context, corpusRoot, tier, outDir string) (*LoadedPa
 		return nil, fmt.Errorf("corpus root %q is not an accessible directory", corpusRoot)
 	}
 
-	commit := detectCorpusCommit(ctx, absCorpus)
+	commit, err := cleanCorpusCommit(ctx, absCorpus)
+	if err != nil {
+		return nil, err
+	}
 
 	cases := make([]model.PackCase, 0, 256)
 	inputs := make(map[string][]byte)
@@ -158,6 +179,16 @@ func BindCorpus(ctx context.Context, corpusRoot, tier, outDir string) (*LoadedPa
 		}
 	}
 
+	// The checkout must still be clean at the same commit after every file
+	// has been read, so the bound files are the ones that commit names.
+	after, err := cleanCorpusCommit(ctx, absCorpus)
+	if err != nil {
+		return nil, err
+	}
+	if after != commit {
+		return nil, fmt.Errorf("structcorpus checkout moved from %s to %s during bind", commit, after)
+	}
+
 	sort.Slice(cases, func(i, j int) bool {
 		return cases[i].CaseID < cases[j].CaseID
 	})
@@ -185,16 +216,51 @@ func allowedTiersFor(tier string) (map[string]bool, error) {
 	}
 }
 
-func detectCorpusCommit(ctx context.Context, absCorpus string) string {
-	cmd := exec.CommandContext(ctx, "git", "-C", absCorpus, "rev-parse", "HEAD")
-	out, err := cmd.Output()
-	if err == nil {
-		candidate := strings.TrimSpace(string(out))
-		if len(candidate) == 40 {
-			return candidate
+// cleanCorpusCommit returns the commit checked out at absCorpus. It fails
+// unless absCorpus is the top level of a git work tree whose HEAD resolves to
+// a commit and which has no staged, unstaged or untracked changes, so a pack
+// never records a commit whose files it did not read.
+func cleanCorpusCommit(ctx context.Context, absCorpus string) (string, error) {
+	git := func(args ...string) (string, error) {
+		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", absCorpus}, args...)...)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		out, err := cmd.Output()
+		if err != nil {
+			return "", fmt.Errorf("git %s: %w (%s)", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 		}
+		return strings.TrimSpace(string(out)), nil
 	}
-	return model.StructcorpusPinnedCommit
+	top, err := git("rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", fmt.Errorf("structcorpus root %q is not a git checkout: %w", absCorpus, err)
+	}
+	wantTop, err := filepath.EvalSymlinks(absCorpus)
+	if err != nil {
+		return "", fmt.Errorf("resolve corpus path: %w", err)
+	}
+	gotTop, err := filepath.EvalSymlinks(top)
+	if err != nil {
+		return "", fmt.Errorf("resolve corpus work tree: %w", err)
+	}
+	if filepath.Clean(gotTop) != filepath.Clean(wantTop) {
+		return "", fmt.Errorf("structcorpus root %q is not the top of its git work tree (%s)", absCorpus, top)
+	}
+	commit, err := git("rev-parse", "--verify", "HEAD^{commit}")
+	if err != nil {
+		return "", fmt.Errorf("structcorpus checkout has no commit: %w", err)
+	}
+	if len(commit) != 40 && len(commit) != 64 {
+		return "", fmt.Errorf("structcorpus HEAD %q is not a full commit id", commit)
+	}
+	status, err := git("status", "--porcelain", "--untracked-files=all")
+	if err != nil {
+		return "", err
+	}
+	if status != "" {
+		return "", fmt.Errorf("structcorpus checkout %s has uncommitted changes; bind requires a clean checkout", absCorpus)
+	}
+	return commit, nil
 }
 
 func appendStructcorpusLines(
@@ -270,21 +336,7 @@ func mapStructcorpusCase(rec structcorpusRecord, packRel, boundTier string) (mod
 		exp.OutputSHA256 = sha256Hex(compact.Bytes())
 	}
 
-	var budgets *model.CaseBudgets
-	if rec.Execution.Budgets != nil {
-		budgets = &model.CaseBudgets{
-			MaxWallMs:      rec.Execution.Budgets.MaxWallMs,
-			MaxRSSBytes:    rec.Execution.Budgets.MaxRSSBytes,
-			MaxOutputBytes: rec.Execution.Budgets.MaxOutputBytes,
-		}
-	} else if axis == "containment" {
-		budgets = &model.CaseBudgets{
-			MaxWallMs:             5000,
-			MaxRSSBytes:           128 * 1024 * 1024,
-			MaxOutputBytes:        16 * 1024 * 1024,
-			MaxAmplificationRatio: 64.0,
-		}
-	}
+	budgets := bindBudgets(rec.Execution.Budgets, axis)
 
 	tags := []string{rec.Category, rec.Execution.Tier}
 	tags = append(tags, rec.Execution.Hazards...)
@@ -308,6 +360,40 @@ func mapStructcorpusCase(rec structcorpusRecord, packRel, boundTier string) (mod
 		Tags:        tags,
 		Description: rec.Review.Rationale,
 	}, nil
+}
+
+// Containment defaults for budgets a structcorpus case does not declare.
+var defaultContainmentBudgets = model.CaseBudgets{
+	MaxWallMs:             5000,
+	MaxRSSBytes:           128 * 1024 * 1024,
+	MaxOutputBytes:        16 * 1024 * 1024,
+	MaxAmplificationRatio: 64.0,
+}
+
+// bindBudgets maps structcorpus budgets onto pack budgets. Declared values
+// are kept exactly. On the containment axis, any budget the case does not
+// declare takes the containment default, including the amplification ratio,
+// which structcorpus does not express.
+func bindBudgets(src *structcorpusBudgets, axis string) *model.CaseBudgets {
+	if src == nil && axis != "containment" {
+		return nil
+	}
+	var out model.CaseBudgets
+	if axis == "containment" {
+		out = defaultContainmentBudgets
+	}
+	if src != nil {
+		if src.WallMs > 0 {
+			out.MaxWallMs = src.WallMs
+		}
+		if src.MemoryBytes > 0 {
+			out.MaxRSSBytes = src.MemoryBytes
+		}
+		if src.OutputBytes > 0 {
+			out.MaxOutputBytes = src.OutputBytes
+		}
+	}
+	return &out
 }
 
 func selectValueExpectation(vals []structcorpusValueExpect) structcorpusValueExpect {
