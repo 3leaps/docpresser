@@ -231,20 +231,14 @@ func cleanCorpusCommit(ctx context.Context, absCorpus string) (string, error) {
 		}
 		return strings.TrimSpace(string(out)), nil
 	}
-	top, err := git("rev-parse", "--show-toplevel")
+	// --show-prefix is empty exactly when absCorpus is the work tree's top
+	// level; this avoids comparing paths that differ only in spelling.
+	prefix, err := git("rev-parse", "--show-prefix")
 	if err != nil {
 		return "", fmt.Errorf("structcorpus root %q is not a git checkout: %w", absCorpus, err)
 	}
-	wantTop, err := filepath.EvalSymlinks(absCorpus)
-	if err != nil {
-		return "", fmt.Errorf("resolve corpus path: %w", err)
-	}
-	gotTop, err := filepath.EvalSymlinks(top)
-	if err != nil {
-		return "", fmt.Errorf("resolve corpus work tree: %w", err)
-	}
-	if filepath.Clean(gotTop) != filepath.Clean(wantTop) {
-		return "", fmt.Errorf("structcorpus root %q is not the top of its git work tree (%s)", absCorpus, top)
+	if prefix != "" {
+		return "", fmt.Errorf("structcorpus root %q is not the top of its git work tree (prefix %q)", absCorpus, prefix)
 	}
 	commit, err := git("rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {

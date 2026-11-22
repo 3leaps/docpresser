@@ -91,7 +91,9 @@ Docpresser supports two pack sources:
    with no uncommitted or untracked changes, before and after binding. Each
    case's `execution.budgets` (`wall_ms`, `memory_bytes`, `output_bytes`) binds
    exactly; on the containment axis an undeclared budget takes the containment
-   default. Per-case profile revisions are not yet recorded in the pack.
+   default. Per-case profile revisions are not yet recorded in the pack, and
+   cases without a value expectation (such as resource ladders) cannot be
+   bound yet.
 2. **Seeded synthetic scale packs (`generate`):** deterministically synthesizes
    large structured documents (`10 KiB` to `100 MiB` multi-document YAML
    streams, OpenAPI/schema trees, JSON/I-JSON payloads, deep XML/XHTML/SVG trees,

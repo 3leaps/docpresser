@@ -63,6 +63,15 @@ func TestWave1Profiles_EndToEndQualification(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(corpusDir, "manifests", "cases.jsonl"), []byte(caseLine), 0o600); err != nil {
 			t.Fatal(err)
 		}
+		// bind-corpus requires a clean committed checkout.
+		for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}, {"commit", "-q", "-m", "fixture"}} {
+			base := []string{"-C", corpusDir, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false"}
+			cmd := exec.Command("git", append(base, args...)...)
+			cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v\n%s", args, err, out)
+			}
+		}
 
 		packDir := filepath.Join(t.TempDir(), "pack-conformance")
 		if _, err := pack.BindCorpus(ctx, corpusDir, "smoke", packDir); err != nil {
