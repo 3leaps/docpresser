@@ -38,8 +38,7 @@ git -C "$repo" config core.autocrlf false
 git -C "$repo" config user.name fixture
 git -C "$repo" config user.email fixture@example.invalid
 git -C "$repo" config commit.gpgsign false
-mkdir -p "$repo/scripts" "$repo/.limensafe"
-cp "$root/.limensafe/config.yaml" "$repo/.limensafe/"
+mkdir -p "$repo/scripts"
 cp "$root/scripts/surface-scan.sh" "$root/scripts/surface-canary.py" "$root/scripts/surface-catalog-path.py" \
     "$root/scripts/export-committed-tree.py" "$root/scripts/committed_tree.py" "$repo/scripts/"
 printf 'clean\n' > "$repo/README"
@@ -112,7 +111,7 @@ refused 'outside this repository' LIMENSAFE_CATALOG_PATH="$scratch/wt/inside.yam
 git -C "$repo" worktree remove --force "$scratch/wt"
 refused 'no usable canary' LIMENSAFE_CATALOG_PATH="$scratch/nocanary.yaml"
 refused 'no entity besides DocpresserCanary' LIMENSAFE_CATALOG_PATH="$scratch/onlycanary.yaml"
-refused 'catalog id mismatch' LIMENSAFE_CATALOG_PATH="$scratch/otherid.yaml"
+refused 'catalog docpresser-release did not load' LIMENSAFE_CATALOG_PATH="$scratch/otherid.yaml"
 printf '#!/bin/sh\necho boom >&2\nexit 7\n' > "$scratch/broken"
 chmod +x "$scratch/broken"
 refused 'limensafe exited 7' ${cat_ok[@]+"${cat_ok[@]}"} DOCPRESSER_LIMENSAFE_BIN="$scratch/broken"

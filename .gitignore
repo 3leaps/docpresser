@@ -62,3 +62,5 @@ __pycache__/
 *.pyc
 drivers/*/target/
 drivers/*/node_modules/
+
+/.limensafe/
