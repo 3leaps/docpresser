@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT OR Apache-2.0
-# Public-surface scan with limensafe, configured by .limensafe/config.yaml:
-# the built-in public baseline plus a maintainer catalog kept outside this
-# repository. The catalog is never given to any workflow, so nothing private
-# can reach a GitHub runner; CI runs the baseline only.
+# Public-surface scan with limensafe: the built-in public baseline, from a
+# configuration written to a temporary directory at run time, plus a
+# maintainer catalog kept outside this repository and passed with --catalog.
+# No scan configuration is kept in the repository. The catalog is never given
+# to any workflow, so nothing private can reach a GitHub runner; CI runs the
+# baseline only.
 #
 # Scans the tracked tree at HEAD, each commit message in BASE..HEAD, the PR
 # title and body when DOCPRESSER_SURFACE_PR_TEXT names a file, and the branch
@@ -41,7 +43,6 @@ cd "$root"
 catalog_id=docpresser-release
 baseline_id=limensafe-public-baseline-v0
 canary_id=DocpresserCanary
-config="$root/.limensafe/config.yaml"
 
 # fd 3 is the caller's stderr: errors stay visible even where a scan's own
 # finding lines are redirected away.
@@ -51,7 +52,6 @@ die() {
     exit 1
 }
 
-[[ -f "$config" && ! -L "$config" ]] || die 'missing .limensafe/config.yaml'
 case "${DOCPRESSER_SURFACE_SCOPE:-pr}" in
     pr | release) ;;
     *) die 'DOCPRESSER_SURFACE_SCOPE must be pr or release' ;;
@@ -65,7 +65,8 @@ if [[ "${DOCPRESSER_SURFACE_BASELINE_ONLY:-0}" == 1 ]]; then
     [[ "${DOCPRESSER_SURFACE_SCAN_REQUIRED:-0}" != 1 ]] || die 'the baseline-only scan cannot satisfy DOCPRESSER_SURFACE_SCAN_REQUIRED=1'
     [[ "${DOCPRESSER_SURFACE_SCOPE:-pr}" == pr ]] || die 'the baseline-only scan is PR scope only'
     baseline_only=1
-    scan_mode=(--mode ci --private-catalog-missing warn)
+    scan_mode=(--mode ci)
+    catalog_args=()
     required_catalogs="$baseline_id"
 else
     if [[ -z "${LIMENSAFE_CATALOG_PATH+set}" ]]; then
@@ -80,6 +81,7 @@ else
     [[ -n "$catalog" ]] || die 'LIMENSAFE_CATALOG_PATH is set but empty'
     [[ "$catalog" == /* ]] || die 'LIMENSAFE_CATALOG_PATH must be an absolute path'
     [[ -f "$catalog" && -r "$catalog" ]] || die 'LIMENSAFE_CATALOG_PATH does not name a readable file'
+    catalog_args=(--catalog "$catalog")
     common="$(git --no-replace-objects -C "$root" rev-parse --path-format=absolute --git-common-dir)"
     worktrees="$(git --no-replace-objects --git-dir="$common" worktree list --porcelain)" || die 'cannot enumerate worktrees'
     roots=("$root")
@@ -100,12 +102,28 @@ fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/docpresser-surface.XXXXXX")"
 trap 'rc=$?; rm -rf "$work"; exit "$rc"' EXIT
+config="$work/config.yaml"
+cat > "$config" << YAML
+schema_version: "1.0.0"
+repo:
+  id: 3leaps/docpresser
+  visibility: public_oss
+catalogs:
+  - catalog_id: $baseline_id
+    source:
+      kind: builtin
+      name: public-baseline
+    optional: false
+policy:
+  block_threshold: high
+  redaction_safe_output: true
+YAML
 
 scan() {
     local label="$1" rc=0
     shift
     rm -f "$work/report.json"
-    "$bin" scan "$@" --config-file "$config" "${scan_mode[@]}" --include-ignored --max-file-size 4294967296 \
+    "$bin" scan "$@" --config-file "$config" ${catalog_args[@]+"${catalog_args[@]}"} "${scan_mode[@]}" --include-ignored --max-file-size 4294967296 \
         > "$work/report.json" 2> "$work/scan.err" || rc=$?
     [[ "$rc" -le 1 ]] || {
         grep -v '^catalog warning: ' "$work/scan.err" | head -3 >&3 || true
