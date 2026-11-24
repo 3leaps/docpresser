@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `make release-prepare-tag-message` drafts a new tag message from the release's dated `CHANGELOG.md` section, copied as written after the changelog passes its release guard. The draft carries a review-marker line that tagging refuses until it is deleted.
+
 ## [0.2.4] - 2026-11-22
 
 - New `serde-yaml-rust` baseline driver loads YAML through `serde_yaml` 0.9.34+deprecated's public untyped API: `from_slice` into `serde_yaml::Value` with no profile and for `yamlprims-core-merge-as-key`, the `Deserializer::from_slice` document iterator for `yaml-core`, and `apply_merge` for `yamlprims-core-merge-apply`. It reports the same value notation as the `yamlprims-rust` driver. Its handshake reports the `serde_yaml` and `unsafe-libyaml` versions resolved by its committed `Cargo.lock`, and its build fails unless the lock matches the exact `serde_yaml` pin. `serde_yaml` keeps merge keys as ordinary keys and exposes no resource limits, so every other profile, including unknown names and profiles that reject merge keys or set limits, answers `unsupported` with `unsupported_profile`. Errors are classified from `serde_yaml`'s fixed diagnostics without matching input text quoted in a message.
